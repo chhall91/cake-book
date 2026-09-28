@@ -49,6 +49,7 @@
 
   var state = { orders: [], settings: { defaultReminders: DEFAULT_REMINDERS.slice(), notified: {} } };
   function persist() { return DB.set('orders', state.orders); }
+  var Push = window.CakePush;
   function persistSettings() { return DB.set('settings', state.settings); }
 
   // ---------- utils ----------
@@ -521,6 +522,7 @@
       delete rec._newOn; delete rec.warnings;
       if (fromVoice && existing.transcript) rec.transcript = existing.transcript;
       if (isEdit) state.orders = state.orders.map(function (x) { return x.id === rec.id ? rec : x; }); else state.orders.push(rec);
+      Push.markDirty(rec.id);
       removedIds.forEach(function (pid) { Store.photoDel(pid).catch(function () {}); });
       persist().then(function () { toast(isEdit ? 'Order updated ✓' : 'Cake order saved 🎂'); })
         .catch(function () { toast('Could not save – phone storage may be full.', 5000); });
@@ -586,7 +588,8 @@
   }
   function renderBanner() {
     var b = $('#banner'), list = dueSoon();
-    var canAsk = 'Notification' in window && Notification.permission === 'default' && state.orders.length > 0;
+    var ps = Push.status();
+    var canAsk = state.orders.length > 0 && (ps === 'off' ? Notification.permission !== 'denied' : ps === 'no-server' && 'Notification' in window && Notification.permission === 'default');
     var sig = list.map(function (o) { return o.id + o.dueDate; }).join('|') + canAsk;
     if ((!list.length && !canAsk) || sessionStorage.getItem('bannerHidden') === sig) { b.hidden = true; return; }
     var html = '';
@@ -599,7 +602,7 @@
     html += '<div class="row">' + (canAsk ? '<button class="btn small-btn" id="bannerNotif">Turn on alerts</button>' : '') + '<button class="btn link small-btn" id="bannerHide">Hide</button></div>';
     b.innerHTML = html; b.hidden = false;
     $('#bannerHide').onclick = function () { sessionStorage.setItem('bannerHidden', sig); b.hidden = true; };
-    if ($('#bannerNotif')) $('#bannerNotif').onclick = requestNotifications;
+    if ($('#bannerNotif')) $('#bannerNotif').onclick = function () { if (Push.status() === 'off') enablePush(); else requestNotifications(); };
   }
   function requestNotifications() {
     if (!('Notification' in window)) {
@@ -616,8 +619,23 @@
     try { var n = new Notification(title, opts); n.onclick = function () { window.focus(); location.hash = url; }; } catch (e) {}
     return Promise.resolve();
   }
+  // What the push server gets for one order: only customer name, occasion and due date/time.
+  function pushRemindersFor(o) {
+    if (!o || !o.dueDate || isClosed(o)) return [];
+    var now = Date.now();
+    return (o.reminders || []).filter(function (r) { return r && r.time; }).map(function (r) {
+      var t = ICS.reminderDate(o, r);
+      if (isNaN(t) || t.getTime() < now - 5 * 60000) return null; // server ignores older ones too
+      var n = daysBetween(t, parseISO(o.dueDate));
+      return {
+        fireAt: t.toISOString(),
+        title: '🎂 ' + (n <= 0 ? 'Today: ' : n === 1 ? 'Tomorrow: ' : 'In ' + n + ' days: ') + (o.name || 'Cake') + (o.occasion ? ' – ' + o.occasion : ''),
+        body: 'Due ' + fmtDate(o.dueDate) + (o.dueTime ? ' at ' + fmtTime(o.dueTime) : '')
+      };
+    }).filter(Boolean).slice(0, 20);
+  }
   function checkReminders() {
-    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (!('Notification' in window) || Notification.permission !== 'granted' || Push.isOn()) return;
     var now = new Date(), changed = false;
     state.orders.forEach(function (o) {
       if (!o.dueDate || isClosed(o)) return;
@@ -641,11 +659,7 @@
 
   // ---------- settings, export, backup ----------
   function renderSettings() {
-    var st = !('Notification' in window) ? (IS_IOS ? 'On iPhone, app alerts work only after “Add to Home Screen” (iOS 16.4+). Calendar reminders (below) always work.' : 'Not supported in this browser.')
-      : Notification.permission === 'granted' ? 'App alerts are ON – they appear when the app is open or recently opened.'
-      : Notification.permission === 'denied' ? 'Alerts are blocked – change this in Settings › Notifications.' : 'App alerts are off.';
-    $('#notifStatus').textContent = st;
-    $('#notifBtn').hidden = !('Notification' in window) || Notification.permission !== 'default';
+    renderNotifCard();
     var ed = reminderEditor($('#defaultReminders'), state.settings.defaultReminders, persistSettings);
     $('#addDefaultReminder').onclick = function () { ed.add(); };
     var n = state.orders.length, base = n + ' order' + (n === 1 ? '' : 's') + ' saved on this device.';
@@ -653,6 +667,46 @@
     if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(function (e) {
       $('#storageInfo').textContent = base + ' ' + (e.usage / 1048576).toFixed(1) + ' MB used. Save a backup now and then (e.g. to iCloud Drive).';
     }).catch(function () {});
+  }
+  function renderNotifCard() {
+    var ps = Push.status(), el = $('#notifStatus'), html = '';
+    var show = { pushOnBtn: false, pushTestBtn: false, pushOffBtn: false, notifBtn: false };
+    if (ps === 'need-homescreen') {
+      html = '<b>To get order reminders even when Cake Book is closed</b>, it has to be on your Home Screen (iPhone with iOS 16.4 or newer):' +
+        '<ol class="push-steps"><li>In Safari tap the Share button <b>⬆︎</b></li><li>Choose <b>Add to Home Screen</b></li><li>Open Cake Book from the new Home Screen icon</li><li>Come back here (More) and tap <b>Turn on reminder notifications</b></li></ol>';
+    } else if (ps === 'unsupported') {
+      html = IS_IOS ? 'This iPhone needs iOS 16.4 or newer for app notifications. Use the calendar reminders below instead.' : 'This browser can’t receive push notifications. Use the calendar reminders below instead.';
+    } else if (ps === 'denied') {
+      html = 'Notifications are blocked for Cake Book. ' + (IS_IOS ? 'Open iPhone <b>Settings › Notifications › Cake Book</b>, turn on <b>Allow Notifications</b>, then come back here.' : 'Allow them in your browser’s site settings, then come back here.');
+    } else if (ps === 'on') {
+      var pend = Push.pendingCount(), le = Push.lastError();
+      html = '✅ <b>Reminder notifications are ON.</b> They arrive at each reminder time, even when the app is closed.' +
+        (pend ? '<br><span class="small">⏳ ' + (le === 'offline' ? 'Offline – ' : '') + 'waiting to sync changes' + (le && le !== 'offline' ? ' (' + esc(le) + ')' : '') + '… will retry automatically.</span>' : '');
+      show.pushTestBtn = show.pushOffBtn = true;
+    } else if (ps === 'off') {
+      html = 'Get a notification on this phone at each order’s reminder times – even when Cake Book is closed.' +
+        (Push.lastError() === 'unauthorized' ? '<br><b>Please turn reminder notifications on again.</b>' : '');
+      show.pushOnBtn = true;
+    } else { // no-server: in-app alerts only (old behaviour)
+      html = !('Notification' in window) ? (IS_IOS ? 'On iPhone, app alerts work only after “Add to Home Screen” (iOS 16.4+). Calendar reminders (below) always work.' : 'Not supported in this browser.')
+        : Notification.permission === 'granted' ? 'App alerts are ON – they appear when the app is open or recently opened.'
+        : Notification.permission === 'denied' ? 'Alerts are blocked – change this in Settings › Notifications.' : 'App alerts are off.';
+      show.notifBtn = 'Notification' in window && Notification.permission === 'default';
+    }
+    el.innerHTML = html;
+    Object.keys(show).forEach(function (k) { $('#' + k).hidden = !show[k]; });
+  }
+  function enablePush() {
+    var btn = $('#pushOnBtn'); btn.disabled = true; btn.textContent = 'Turning on…';
+    Push.enable().then(function () {
+      toast('Reminder notifications are on 🔔', 3500);
+    }).catch(function (e) {
+      toast(e.code === 'denied' ? 'Notifications were not allowed' : e.code === 'offline' ? 'No internet connection – try again when you’re online.' : 'Could not turn on notifications: ' + (e.message || e), 5000);
+    }).then(function () {
+      btn.disabled = false; btn.textContent = 'Turn on reminder notifications';
+      if (!$('#view-settings').hidden) renderNotifCard();
+      if (!$('#view-upcoming').hidden) renderBanner();
+    });
   }
   function exportICS(list, name) {
     if (!list.length) { toast('No orders to export'); return; }
@@ -700,7 +754,7 @@
         state.orders = Object.keys(map).map(function (k) { return map[k]; });
         if (data.settings && Array.isArray(data.settings.defaultReminders)) state.settings.defaultReminders = data.settings.defaultReminders;
         return Promise.all([persist(), persistSettings()]);
-      }).then(function () { toast('Restored ' + list.length + ' order' + (list.length === 1 ? '' : 's') + (photos.length ? ' and ' + photos.length + ' photos' : '') + ' ✓', 4000); route(); })
+      }).then(function () { Push.fullSync(); toast('Restored ' + list.length + ' order' + (list.length === 1 ? '' : 's') + (photos.length ? ' and ' + photos.length + ' photos' : '') + ' ✓', 4000); route(); })
         .catch(function () { toast('Restore failed – the phone may be out of storage space.', 6000); });
     };
     rd.readAsText(file);
@@ -762,12 +816,12 @@
       if ((el = t.closest('[data-icsfile]'))) { e.preventDefault(); var of = getOrder(el.dataset.icsfile); if (of) shareOrDownload(icsName(of), ICS.buildICS([of]), 'text/calendar'); return; }
       if ((el = t.closest('[data-status]'))) {
         var od = getOrder(location.hash.split('/')[2]); if (!od) return;
-        od.status = el.dataset.status; od.updatedAt = Date.now(); persist(); renderDetail(od.id); toast('Status: ' + od.status); return;
+        od.status = el.dataset.status; od.updatedAt = Date.now(); persist(); Push.markDirty(od.id); renderDetail(od.id); toast('Status: ' + od.status); return;
       }
       if ((el = t.closest('[data-delete]'))) {
         var del = getOrder(el.dataset.delete);
         if (del && confirm('Delete the order for ' + (del.name || 'this customer') + '? This cannot be undone.')) {
-          state.orders = state.orders.filter(function (x) { return x.id !== del.id; }); persist(); deleteOrderPhotos(del); toast('Order deleted'); location.replace('#/upcoming');
+          state.orders = state.orders.filter(function (x) { return x.id !== del.id; }); persist(); Push.markDirty(del.id); deleteOrderPhotos(del); toast('Order deleted'); location.replace('#/upcoming');
         }
       }
     });
@@ -778,6 +832,17 @@
     $('#calToday').onclick = function () { var n = new Date(); calState.month = new Date(n.getFullYear(), n.getMonth(), 1); calState.selected = iso(n); renderCalendar(); };
     $('#searchInput').oninput = renderOrders;
     $('#notifBtn').onclick = requestNotifications;
+    $('#pushOnBtn').onclick = enablePush;
+    $('#pushOffBtn').onclick = function () {
+      if (!confirm('Turn off reminder notifications on this phone? (Calendar reminders keep working.)')) return;
+      Push.disable().then(function () { toast('Reminder notifications turned off'); });
+    };
+    $('#pushTestBtn').onclick = function () {
+      var b = $('#pushTestBtn'); b.disabled = true;
+      Push.sendTest().then(function () { toast('Test sent – it should appear in a few seconds 🔔', 4000); })
+        .catch(function (e) { toast(e.code === 'offline' ? 'No internet connection' : (e.message || 'Test failed'), 5000); })
+        .then(function () { b.disabled = false; });
+    };
     $('#exportIcsUpcoming').onclick = function () { var today = iso(new Date()); exportICS(state.orders.filter(function (o) { return o.dueDate >= today && !isClosed(o); }), 'cake-orders-upcoming.ics'); };
     $('#exportIcsAll').onclick = function () { exportICS(state.orders.filter(function (o) { return o.dueDate; }), 'cake-orders-all.ics'); };
     $('#exportJson').onclick = exportJSON;
@@ -785,7 +850,7 @@
     $('#wipeAll').onclick = function () {
       if (!state.orders.length) { toast('Nothing to delete'); return; }
       if (confirm('Delete ALL ' + state.orders.length + ' orders from this device?') && confirm('Really delete everything? Consider saving a backup first.')) {
-        state.orders = []; persist(); Store.photoClear().catch(function () {}); toast('All orders deleted'); route();
+        state.orders = []; persist(); Push.fullSync(); Store.photoClear().catch(function () {}); toast('All orders deleted'); route();
       }
     };
     $('#bigMic').onclick = function () { if (bigListening) stopBigMic(); else startBigMic(); };
@@ -818,6 +883,11 @@
     return migrateLegacyPhotos(state.orders).then(function (changed) { return changed ? persist() : null; }).catch(function () {});
   }).then(function () {
     bind(); route(); checkReminders();
+    Push.init({
+      kvGet: Store.kvGet, kvSet: Store.kvSet,
+      getOrders: function () { return state.orders; }, getOrder: getOrder, remindersFor: pushRemindersFor,
+      onState: function () { if (!$('#view-settings').hidden) renderNotifCard(); }
+    });
     if (ordersLoaded) sweepOrphanPhotos(); // never sweep if orders could not be read
     document.documentElement.classList.add('ready');
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
@@ -838,5 +908,5 @@
     });
     navigator.serviceWorker.addEventListener('message', function (e) { if (e.data && e.data.url) location.hash = e.data.url; });
   }
-  window.CakeApp = { store: Store, photos: PH, state: state, persist: persist, route: route, buildICS: function () { return ICS.buildICS(state.orders); } };
+  window.CakeApp = { store: Store, photos: PH, push: Push, pushRemindersFor: pushRemindersFor, state: state, persist: persist, route: route, buildICS: function () { return ICS.buildICS(state.orders); } };
 })();

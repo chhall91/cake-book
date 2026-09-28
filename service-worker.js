@@ -1,6 +1,6 @@
-/* Cake Book service worker: offline app shell + serves generated .ics files as real text/calendar URLs (for iOS Calendar). */
-var VERSION = 'cakebook-v4';
-var SHELL = ['./', 'index.html', 'assets/styles.css', 'assets/app.js', 'assets/parser.js', 'assets/ics.js', 'assets/photos.js', 'manifest.json',
+/* Cake Book service worker: offline app shell, push reminders, and generated .ics files served as real text/calendar URLs (for iOS Calendar). */
+var VERSION = 'cakebook-v5';
+var SHELL = ['./', 'index.html', 'assets/styles.css', 'assets/app.js', 'assets/parser.js', 'assets/ics.js', 'assets/photos.js', 'assets/push.js', 'assets/config.js', 'manifest.json',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 var ICS_CACHE = 'cakebook-ics';
 
@@ -48,6 +48,15 @@ self.addEventListener('fetch', function (e) {
     return c.match(req, { ignoreSearch: true }).then(function (hit) {
       return hit || fetch(req).then(function (res) { if (res.ok && url.pathname.indexOf('/ics/') === -1) c.put(req, res.clone()); return res; });
     });
+  }));
+});
+// Push reminders from the cake-push Worker. iOS requires every push to show a notification.
+self.addEventListener('push', function (e) {
+  var d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (x) { d = { body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'Cake Book', {
+    body: d.body || '', tag: d.tag || undefined, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png',
+    data: { url: typeof d.url === 'string' && d.url.charAt(0) === '#' ? d.url : '#/upcoming' }
   }));
 });
 self.addEventListener('notificationclick', function (e) {

@@ -254,3 +254,7 @@ html.viewer-open, html.viewer-open body { overflow: hidden; }
 .v-prev { left: 6px; } .v-next { right: 6px; }
 .viewer-caption { padding: 10px 16px 4px; text-align: center; font-size: 17px; font-weight: 600; }
 .viewer-hint { padding: 4px 16px calc(env(safe-area-inset-bottom) + 12px); text-align: center; font-size: 13px; opacity: .6; }
+#pushBtns { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+#pushBtns:empty, #pushBtns:not(:has(> :not([hidden]))) { display: none; }
+.push-steps { margin: 6px 0 4px 1.2em; padding: 0; }
+.push-steps li { margin: 2px 0; }

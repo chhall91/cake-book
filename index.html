@@ -60,8 +60,13 @@
       <div class="card">
         <h3>🔔 Reminders</h3>
         <p class="muted" id="notifStatus"></p>
-        <button class="btn" id="notifBtn">Allow notifications</button>
-        <p class="muted small">Phone notifications from a web app only appear while the app is open or recently opened. For reminders that always fire, use <b>Add to my phone's calendar</b> on each order, or export them all below.</p>
+        <div class="row wrap" id="pushBtns">
+          <button class="btn" id="pushOnBtn" hidden>Turn on reminder notifications</button>
+          <button class="btn secondary" id="pushTestBtn" hidden>Send test notification</button>
+          <button class="btn link" id="pushOffBtn" hidden>Turn off</button>
+        </div>
+        <button class="btn" id="notifBtn" hidden>Allow notifications</button>
+        <p class="muted small" id="notifHelp">Backup: <b>Add to my phone's calendar</b> on each order (or export them all below) also gives you reminders.</p>
         <h4>Default reminders for new orders</h4>
         <div id="defaultReminders" class="reminders"></div>
         <button class="btn secondary small-btn" id="addDefaultReminder">＋ Add reminder</button>
@@ -126,9 +131,11 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <script src="assets/config.js"></script>
   <script src="assets/parser.js"></script>
   <script src="assets/ics.js"></script>
   <script src="assets/photos.js"></script>
+  <script src="assets/push.js"></script>
   <script src="assets/app.js"></script>
 </body>
 </html>
