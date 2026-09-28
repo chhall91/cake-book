@@ -1,6 +1,6 @@
 /* Cake Book service worker: offline app shell + serves generated .ics files as real text/calendar URLs (for iOS Calendar). */
 var VERSION = 'cakebook-v3';
-var SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'parser.js', 'ics.js', 'photos.js', 'manifest.json',
+var SHELL = ['./', 'index.html', 'assets/styles.css', 'assets/app.js', 'assets/parser.js', 'assets/ics.js', 'assets/photos.js', 'manifest.json',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 var ICS_CACHE = 'cakebook-ics';
 
@@ -33,18 +33,20 @@ self.addEventListener('fetch', function (e) {
     }));
     return;
   }
-  // App shell: network-first for navigations (fresh code when online), cache fallback offline.
+  // App shell: pages and assets come from ONE precached version, so code is never mixed across versions.
+  // Updates: the browser (and the app, when reopened) checks service-worker.js; a new version precaches everything,
+  // activates, and the page reloads onto it.
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then(function (res) {
-      var copy = res.clone(); caches.open(VERSION).then(function (c) { c.put('index.html', copy); }); return res;
-    }).catch(function () { return caches.match('index.html'); }));
+    e.respondWith(caches.open(VERSION).then(function (c) {
+      return c.match('index.html').then(function (hit) {
+        return hit || fetch(req).catch(function () { return c.match('./'); });
+      });
+    }));
     return;
   }
-  // Static assets: stale-while-revalidate.
   e.respondWith(caches.open(VERSION).then(function (c) {
     return c.match(req, { ignoreSearch: true }).then(function (hit) {
-      var net = fetch(req).then(function (res) { if (res.ok) c.put(req, res.clone()); return res; }).catch(function () { return hit; });
-      return hit || net;
+      return hit || fetch(req).then(function (res) { if (res.ok && url.pathname.indexOf('/ics/') === -1) c.put(req, res.clone()); return res; });
     });
   }));
 });

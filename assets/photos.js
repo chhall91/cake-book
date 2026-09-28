@@ -14,7 +14,7 @@
         if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
         if (!db.objectStoreNames.contains('photos')) db.createObjectStore('photos', { keyPath: 'id' });
       };
-      r.onsuccess = function () { res(r.result); };
+      r.onsuccess = function () { var db = r.result; db.onversionchange = function () { db.close(); dbp = null; }; res(db); };
       r.onerror = function () { rej(r.error); };
       r.onblocked = function () { rej(new Error('Database upgrade blocked – close other Cake Book tabs.')); };
     });
