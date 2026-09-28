@@ -1,11 +1,11 @@
 /* Cake Book service worker: offline app shell + serves generated .ics files as real text/calendar URLs (for iOS Calendar). */
-var VERSION = 'cakebook-v1';
-var SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'parser.js', 'ics.js', 'manifest.json',
+var VERSION = 'cakebook-v3';
+var SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'parser.js', 'ics.js', 'photos.js', 'manifest.json',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 var ICS_CACHE = 'cakebook-ics';
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));
+  e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(SHELL.map(function (u) { return new Request(u, { cache: 'reload' }); })); }).then(function () { return self.skipWaiting(); }));
 });
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (keys) {

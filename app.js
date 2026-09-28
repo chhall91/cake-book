@@ -43,33 +43,9 @@
     ] }
   ];
 
-  // ---------- storage ----------
-  var DB = (function () {
-    var dbp = null;
-    function open() {
-      if (!dbp) dbp = new Promise(function (res, rej) {
-        if (!window.indexedDB) return rej(new Error('no idb'));
-        var r = indexedDB.open('cakebook', 1);
-        r.onupgradeneeded = function () { r.result.createObjectStore('kv'); };
-        r.onsuccess = function () { res(r.result); };
-        r.onerror = function () { rej(r.error); };
-      });
-      return dbp;
-    }
-    function tx(mode, fn) {
-      return open().then(function (db) {
-        return new Promise(function (res, rej) {
-          var t = db.transaction('kv', mode), q = fn(t.objectStore('kv'));
-          t.oncomplete = function () { res(q && q.result); };
-          t.onerror = t.onabort = function () { rej(t.error); };
-        });
-      });
-    }
-    return {
-      get: function (k) { return tx('readonly', function (s) { return s.get(k); }).catch(function () { var v = localStorage.getItem('cakebook:' + k); return v ? JSON.parse(v) : undefined; }); },
-      set: function (k, v) { return tx('readwrite', function (s) { return s.put(v, k); }).catch(function () { localStorage.setItem('cakebook:' + k, JSON.stringify(v)); }); }
-    };
-  })();
+  // ---------- storage (IndexedDB via photos.js: "kv" store for orders/settings, "photos" store for image blobs) ----------
+  var Store = window.CakeStore, PH = window.CakePhotos;
+  var DB = { get: Store.kvGet, set: Store.kvSet };
 
   var state = { orders: [], settings: { defaultReminders: DEFAULT_REMINDERS.slice(), notified: {} } };
   function persist() { return DB.set('orders', state.orders); }
@@ -151,7 +127,10 @@
     try {
       var file = new File([text], name, { type: mime });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: name }).catch(function () {});
+        navigator.share({ files: [file], title: name }).catch(function (e) {
+          if (e && e.name === 'AbortError') return;
+          blobDownload(name, text, mime);
+        });
         toast('Choose “Save to Files”, then tap the file in Files to add it to Calendar.', 6000);
         return;
       }
@@ -209,7 +188,7 @@
   var navCount = 0, pendingDraft = null;
   var calState = { month: new Date(new Date().getFullYear(), new Date().getMonth(), 1), selected: iso(new Date()) };
   function route() {
-    stopActive(); if (bigListening) stopBigMic();
+    stopActive(); if (bigListening) stopBigMic(); PH.close();
     var h = location.hash || '#/upcoming';
     var parts = h.slice(2).split('?')[0].split('/');
     $$('.page').forEach(function (p) { p.hidden = true; });
@@ -247,11 +226,13 @@
       '<span class="pill plain">' + (o.fulfillment === 'delivery' ? '🚗 Delivery' : '🏠 Pickup') + '</span>' +
       (o.allergies ? '<span class="pill warn">⚠ Allergy</span>' : '') +
       (bal > 0 ? '<span class="pill plain">Due ' + money(bal) + '</span>' : '') +
+      (nPhotos(o) ? '<span class="pill photo-pill" aria-label="' + nPhotos(o) + ' photos">📷 ' + nPhotos(o) + '</span>' : '') +
       (overdue ? '<span class="pill warn">Past due</span>' : '') + '</div></div>' +
-      (o.photo ? '<img class="thumb" src="' + o.photo + '" alt="">' : '') +
+      (nPhotos(o) ? '<img class="thumb" data-pid="' + esc(o.photos[0].id) + '" alt="">' : '') +
       (o.phone ? '<a class="call" href="' + telHref(o.phone) + '" aria-label="Call ' + esc(o.name) + '" data-stop>📞</a>' : '') +
       '</div>';
   }
+  function nPhotos(o) { return (o.photos && o.photos.length) || 0; }
   function emptyHTML(title, text) { return '<div class="empty"><span class="big-emoji">🧁</span><h3>' + esc(title) + '</h3><p>' + text + '</p></div>'; }
 
   // ---------- upcoming ----------
@@ -288,6 +269,7 @@
       ? emptyHTML('All caught up!', 'No upcoming cakes. Tap “Talk to add a cake” when the next order comes in.')
       : emptyHTML('No cake orders yet', 'Tap <b>🎤 Talk to add a cake</b> and just say the order,<br>or type it in with <b>＋ Type a new order</b>.');
     $('#upcomingList').innerHTML = html;
+    PH.hydrate($('#upcomingList'));
   }
 
   // ---------- calendar ----------
@@ -311,6 +293,7 @@
     $('#calDayTitle').textContent = fmtDate(calState.selected, { weekday: 'long', month: 'long', day: 'numeric' });
     $('#calDayList').innerHTML = sel.length ? sel.map(function (o) { return cardHTML(o); }).join('')
       : '<p class="muted center">No cakes this day. <a href="#/new" data-newon="' + calState.selected + '">Add one</a></p>';
+    PH.hydrate($('#calDayList'));
   }
 
   // ---------- all orders / search ----------
@@ -325,6 +308,7 @@
     }).sort(function (a, b) { return byDue(b, a); });
     $('#ordersList').innerHTML = list.length ? list.map(function (o) { return cardHTML(o, { showDate: true }); }).join('')
       : (state.orders.length ? emptyHTML('No matches', 'No orders match “' + esc(q) + '”.') : emptyHTML('No orders yet', 'Orders you add will show up here.'));
+    PH.hydrate($('#ordersList'));
   }
 
   // ---------- detail ----------
@@ -351,10 +335,14 @@
       '<button data-ics="' + esc(o.id) + '"><span>📅</span>Calendar</button></div>' +
       (o.allergies ? '<div class="allergy">⚠️ Allergies / dietary: ' + esc(o.allergies) + '</div>' : '') +
       '<div class="card"><h4 class="mt0">Status</h4><div class="status-picker">' + STATUSES.map(function (s) { return '<button class="' + statusClass(s) + (o.status === s ? ' on' : '') + '" data-status="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div></div>' +
+      '<div class="card"><h3>📷 Photos' + (nPhotos(o) ? ' <span class="count">' + nPhotos(o) + '</span>' : '') + '</h3>' +
+      (nPhotos(o) ? '<div class="photo-grid">' + o.photos.map(function (p, i) {
+        return '<button class="ph-tile" data-photo-open="' + esc(o.id) + '" data-i="' + i + '" aria-label="Open photo ' + (i + 1) + '"><img data-pid="' + esc(p.id) + '" alt="' + esc(p.caption || 'Photo ' + (i + 1)) + '">' +
+          (p.caption ? '<span class="ph-cap">' + esc(p.caption) + '</span>' : '') + '</button>';
+      }).join('') + '</div>' : '<p class="muted small">No photos yet. <a href="#/edit/' + esc(o.id) + '">Add the picture the customer sent</a></p>') + '</div>' +
       '<div class="card"><h3>🎂 The cake</h3>' + (o.message ? '<div class="message-plaque">“' + esc(o.message) + '”</div>' : '') +
       '<dl class="kv">' + row('Occasion', esc(o.occasion)) + row('Size', esc(o.size)) + row('Tiers', esc(o.tiers)) + row('Shape', esc(o.shape)) + row('Servings', esc(o.servings)) +
       row('Flavor', esc(o.flavor)) + row('Filling', esc(o.filling)) + row('Frosting', esc(o.frosting)) + row('Colors / design', esc(o.design).replace(/\n/g, '<br>')) + '</dl></div>' +
-      (o.photo ? '<div class="card"><h3>📷 Inspiration</h3><img class="detail-photo" src="' + o.photo + '" alt="Inspiration photo"></div>' : '') +
       '<div class="card"><h3>💵 Money</h3><dl class="kv">' + row('Price', money(o.price)) + row('Deposit paid', money(o.deposit)) + '</dl>' +
       '<div class="balance-box"><span>Balance due</span><span>' + (o.status === 'Paid' ? 'Paid in full ✓' : money(balance(o))) + '</span></div></div>' +
       '<div class="card"><h3>👤 Customer</h3><dl class="kv">' + row('Name', esc(o.name)) +
@@ -367,6 +355,7 @@
       (o.transcript ? '<details class="card transcript-details"><summary>🎤 What was said</summary><p><i>' + esc(o.transcript) + '</i></p></details>' : '') +
       '<p class="muted small center">Added ' + esc(new Date(o.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) + '</p>' +
       '<button class="btn danger block" data-delete="' + esc(o.id) + '">Delete order</button></div>';
+    PH.hydrate(page);
     return page;
   }
 
@@ -417,20 +406,6 @@
     return { add: function () { list.push({ days: 1, time: '09:00' }); draw(); if (onChange) onChange(list); } };
   }
 
-  function downscaleImage(file, maxDim, quality) {
-    return new Promise(function (res, rej) {
-      var url = URL.createObjectURL(file), img = new Image();
-      img.onload = function () {
-        var s = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
-        var c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
-        var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height);
-        URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', quality));
-      };
-      img.onerror = function () { URL.revokeObjectURL(url); rej(new Error('Could not read that image (HEIC photos may need to be shared as JPEG).')); };
-      img.src = url;
-    });
-  }
-
   function renderForm(existing, fromVoice) {
     var page = $('#page-form'), form = $('#orderForm');
     var isEdit = !!(existing && existing.id);
@@ -454,24 +429,59 @@
       });
       html += '</div>';
     });
-    html += '<div class="form-section"><h3>📷 Inspiration photo</h3><p class="muted small">Optional – a picture the customer sent you.</p>' +
-      '<label class="btn secondary block file-btn">Choose photo<input type="file" id="photoInput" accept="image/*" hidden></label>' +
-      '<img id="photoPreview" class="photo-preview" alt="Inspiration" ' + (o.photo ? 'src="' + o.photo + '"' : 'hidden') + '>' +
-      '<button type="button" class="btn link" id="photoRemove"' + (o.photo ? '' : ' hidden') + '>Remove photo</button></div>';
+    html += '<div class="form-section"><h3>📷 Photos <span class="count" id="photoCount"></span></h3><p class="muted small">Pictures the customer sent (up to ' + PH.MAX_PER_ORDER + '). Choose from Photos or take a picture.</p>' +
+      '<label class="btn secondary block file-btn" id="addPhotosBtn">＋ Add photos<input type="file" id="photoInput" accept="image/*" multiple class="vh"></label>' +
+      '<div class="photo-status muted small" id="photoStatus" hidden></div><div class="photo-list" id="formPhotos"></div></div>';
     html += '<div class="form-section"><h3>🔔 Reminders</h3><div class="reminders" id="formReminders"></div><button type="button" class="btn secondary small-btn" id="addReminder">＋ Add reminder</button></div>';
     html += '<button type="submit" class="btn block big">💾 Save order</button>';
     form.innerHTML = html;
 
-    var photo = o.photo || '';
+    // photos: list of {id, caption}; blobs live in IndexedDB. Removed ones are deleted from storage on save;
+    // photos added but never saved are cleaned up at next start (orphan sweep).
+    var photos = (o.photos || []).map(function (p) { return { id: p.id, caption: p.caption || '' }; });
+    var removedIds = [], photoBusy = 0;
     var remEd = reminderEditor($('#formReminders'), o.reminders);
     $('#addReminder').onclick = function () { remEd.add(); };
+    function drawPhotos() {
+      var box = $('#formPhotos');
+      box.innerHTML = photos.map(function (p, i) {
+        var cid = 'cap_' + p.id;
+        return '<div class="photo-item"><div class="ph-thumb-wrap"><button type="button" class="ph-thumb" data-ph-open="' + i + '" aria-label="View photo ' + (i + 1) + '"><img data-pid="' + esc(p.id) + '" alt=""></button>' +
+          '<button type="button" class="ph-remove" data-ph-remove="' + i + '" aria-label="Remove photo ' + (i + 1) + '">✕</button></div>' +
+          '<div class="input-wrap ph-cap-wrap"><input id="' + cid + '" class="ph-caption" data-ph-cap="' + i + '" type="text" data-kind="text" autocapitalize="sentences" maxlength="140" placeholder="Caption (optional)" value="' + esc(p.caption) + '">' +
+          '<button type="button" class="mic" data-mic="' + cid + '" aria-label="Dictate caption">🎤</button></div></div>';
+      }).join('');
+      PH.hydrate(box);
+      $('#photoCount').textContent = photos.length ? photos.length + ' / ' + PH.MAX_PER_ORDER : '';
+      $('#addPhotosBtn').classList.toggle('disabled', photos.length >= PH.MAX_PER_ORDER);
+    }
+    drawPhotos();
+    $('#formPhotos').addEventListener('input', function (e) { var i = e.target.dataset.phCap; if (i != null && photos[+i]) photos[+i].caption = e.target.value; });
     $('#photoInput').onchange = function (e) {
-      var f = e.target.files[0]; if (!f) return;
-      downscaleImage(f, 1000, 0.72).then(function (data) { photo = data; var p = $('#photoPreview'); p.src = data; p.hidden = false; $('#photoRemove').hidden = false; })
-        .catch(function (err) { toast(err.message, 4000); });
+      var files = Array.prototype.slice.call(e.target.files || []);
+      e.target.value = '';
+      if (!files.length) return;
+      var room = PH.MAX_PER_ORDER - photos.length;
+      if (room <= 0) { toast('This order already has ' + PH.MAX_PER_ORDER + ' photos – remove one first.'); return; }
+      if (files.length > room) { toast('Only ' + room + ' more photo' + (room === 1 ? '' : 's') + ' fit – adding the first ' + room + '.', 4000); files = files.slice(0, room); }
+      var status = $('#photoStatus'), failures = [], done = 0;
+      photoBusy++;
+      status.hidden = false;
+      // one at a time keeps memory low on iPhone
+      files.reduce(function (chain, f) {
+        return chain.then(function () {
+          status.textContent = 'Adding photo ' + (++done) + ' of ' + files.length + '…';
+          return PH.processFile(f).then(function (rec) {
+            return Store.photoPut(rec).then(function () { photos.push({ id: rec.id, caption: '' }); drawPhotos(); },
+              function () { failures.push('Not enough storage space on this phone for more photos.'); });
+          }).catch(function (err) { failures.push(err.friendly ? err.message : 'A photo could not be added.'); });
+        });
+      }, Promise.resolve()).then(function () {
+        photoBusy--; status.hidden = true;
+        if (failures.length) toast((failures.length === 1 ? '' : failures.length + ' photos not added. ') + failures[0], 7000);
+        else toast(files.length === 1 ? 'Photo added 📷' : files.length + ' photos added 📷');
+      });
     };
-    $('#photoRemove').onclick = function () { photo = ''; $('#photoPreview').hidden = true; $('#photoPreview').removeAttribute('src'); $('#photoRemove').hidden = true; $('#photoInput').value = ''; };
-
     function refresh() {
       var fd = form.elements, pr = parseFloat(fd.price.value), dp = parseFloat(fd.deposit.value);
       $('#balanceVal').textContent = fd.status.value === 'Paid' ? 'Paid in full ✓' : (isNaN(pr) ? '—' : money(Math.max(pr - (isNaN(dp) ? 0 : dp), 0)));
@@ -482,13 +492,19 @@
     refresh();
     form.onclick = function (e) {
       var m = e.target.closest('[data-mic]');
-      if (m) { e.preventDefault(); micForField(m, document.getElementById(m.dataset.mic)); }
+      if (m) { e.preventDefault(); micForField(m, document.getElementById(m.dataset.mic)); return; }
+      var rm = e.target.closest('[data-ph-remove]');
+      if (rm) { e.preventDefault(); var gone = photos.splice(+rm.dataset.phRemove, 1)[0]; if (gone) removedIds.push(gone.id); drawPhotos(); toast('Photo removed'); return; }
+      var op = e.target.closest('[data-ph-open]');
+      if (op) { e.preventDefault(); PH.open(photos, +op.dataset.phOpen, viewerOpts(name0())); }
     };
+    function name0() { return form.elements.name.value.trim(); }
     function save(e) {
       if (e) e.preventDefault();
       var fd = form.elements, name = fd.name.value.trim(), due = fd.dueDate.value;
       if (!name) { toast('Please add the customer’s name'); fd.name.focus(); return; }
       if (!due) { toast('Please pick the due date'); fd.dueDate.focus(); return; }
+      if (photoBusy) { toast('Still adding photos – one moment…'); return; }
       var num = function (x) { var n = parseFloat(String(x).replace(/[$,\s]/g, '')); return isNaN(n) ? '' : n; };
       var now = Date.now();
       var rec = Object.assign({}, isEdit ? existing : {}, {
@@ -499,14 +515,15 @@
         dueDate: due, dueTime: fd.dueTime.value, size: fd.size.value.trim(), servings: num(fd.servings.value), tiers: num(fd.tiers.value),
         shape: fd.shape.value, flavor: fd.flavor.value.trim(), filling: fd.filling.value.trim(), frosting: fd.frosting.value.trim(),
         design: fd.design.value.trim(), message: fd.message.value.trim(), allergies: fd.allergies.value.trim(),
-        price: num(fd.price.value), deposit: num(fd.deposit.value), status: fd.status.value, photo: photo,
+        price: num(fd.price.value), deposit: num(fd.deposit.value), status: fd.status.value, photos: photos.slice(),
         reminders: o.reminders.filter(function (r) { return r.time; })
       });
       delete rec._newOn; delete rec.warnings;
       if (fromVoice && existing.transcript) rec.transcript = existing.transcript;
       if (isEdit) state.orders = state.orders.map(function (x) { return x.id === rec.id ? rec : x; }); else state.orders.push(rec);
+      removedIds.forEach(function (pid) { Store.photoDel(pid).catch(function () {}); });
       persist().then(function () { toast(isEdit ? 'Order updated ✓' : 'Cake order saved 🎂'); })
-        .catch(function () { toast('Could not save – storage may be full. Try a smaller photo.', 5000); });
+        .catch(function () { toast('Could not save – phone storage may be full.', 5000); });
       if (fromVoice) $('#transcript').value = '';
       location.replace('#/order/' + rec.id);
     }
@@ -641,27 +658,87 @@
     if (!list.length) { toast('No orders to export'); return; }
     openCalendarFile(name, ICS.buildICS(list));
   }
+  var preparedBackup = null;
   function exportJSON() {
-    var data = { app: 'cake-book', version: 1, exportedAt: new Date().toISOString(), orders: state.orders, settings: { defaultReminders: state.settings.defaultReminders } };
-    var name = 'cake-book-backup-' + iso(new Date()) + '.json', text = JSON.stringify(data);
-    if (IS_IOS) shareOrDownload(name, text, 'application/json'); else { blobDownload(name, text, 'application/json'); toast('Backup saved'); }
+    var btn = $('#exportJson');
+    function deliver(b) {
+      preparedBackup = null; btn.textContent = 'Save backup file';
+      if (IS_IOS) shareOrDownload(b.name, b.text, 'application/json'); else { blobDownload(b.name, b.text, 'application/json'); toast('Backup saved'); }
+    }
+    if (preparedBackup && preparedBackup.sig === backupSig()) { deliver(preparedBackup); return; }
+    var ids = [];
+    state.orders.forEach(function (o) { (o.photos || []).forEach(function (p) { ids.push(p.id); }); });
+    var t0 = Date.now();
+    if (ids.length) toast('Preparing backup with ' + ids.length + ' photo' + (ids.length === 1 ? '' : 's') + '…', 8000);
+    PH.exportPhotos(ids).then(function (photos) {
+      var data = { app: 'cake-book', version: 2, exportedAt: new Date().toISOString(), orders: state.orders, photos: photos, settings: { defaultReminders: state.settings.defaultReminders } };
+      var b = { name: 'cake-book-backup-' + iso(new Date()) + '.json', text: JSON.stringify(data), sig: backupSig() };
+      // Safari only allows the share sheet right after a tap; if preparing took a while, ask for one more tap.
+      if (IS_IOS && Date.now() - t0 > 700) {
+        preparedBackup = b; btn.textContent = '⬇︎ Tap again to save backup (' + (b.text.length / 1048576).toFixed(1) + ' MB)';
+        toast('Backup ready – tap the button again to save it', 5000);
+      } else deliver(b);
+    }).catch(function () { toast('Could not read the photos for the backup'); });
   }
+  function backupSig() { return state.orders.length + ':' + state.orders.reduce(function (m, o) { return Math.max(m, o.updatedAt || 0); }, 0); }
   function importJSON(file) {
     var rd = new FileReader();
     rd.onload = function () {
+      var data, list;
       try {
-        var data = JSON.parse(rd.result), list = Array.isArray(data) ? data : data.orders;
+        data = JSON.parse(rd.result); list = Array.isArray(data) ? data : data.orders;
         if (!Array.isArray(list)) throw new Error('bad');
-        list = list.filter(function (o) { return o && typeof o === 'object' && o.id; });
-        if (!confirm('Restore ' + list.length + ' order(s) from this backup?\nOrders already here with the same ID will be replaced; others are kept.')) return;
-        var map = {}; state.orders.forEach(function (o) { map[o.id] = o; }); list.forEach(function (o) { map[o.id] = o; });
+      } catch (e) { toast('That file is not a Cake Book backup'); return; }
+      list = list.filter(function (o) { return o && typeof o === 'object' && o.id; });
+      var photos = Array.isArray(data.photos) ? data.photos : [];
+      if (!confirm('Restore ' + list.length + ' order(s)' + (photos.length ? ' and ' + photos.length + ' photo(s)' : '') + ' from this backup?\nOrders already here with the same ID will be replaced; others are kept.')) return;
+      toast('Restoring…', 8000);
+      PH.importPhotos(photos).then(function () { return migrateLegacyPhotos(list); }).then(function () {
+        var map = {};
+        state.orders.forEach(function (o) { map[o.id] = o; });
+        list.forEach(function (o) { if (map[o.id] && map[o.id] !== o) deleteReplacedPhotos(map[o.id], o); map[o.id] = o; });
         state.orders = Object.keys(map).map(function (k) { return map[k]; });
         if (data.settings && Array.isArray(data.settings.defaultReminders)) state.settings.defaultReminders = data.settings.defaultReminders;
-        Promise.all([persist(), persistSettings()]).then(function () { toast('Restored ' + list.length + ' orders ✓'); route(); });
-      } catch (e) { toast('That file is not a Cake Book backup'); }
+        return Promise.all([persist(), persistSettings()]);
+      }).then(function () { toast('Restored ' + list.length + ' order' + (list.length === 1 ? '' : 's') + (photos.length ? ' and ' + photos.length + ' photos' : '') + ' ✓', 4000); route(); })
+        .catch(function () { toast('Restore failed – the phone may be out of storage space.', 6000); });
     };
     rd.readAsText(file);
   }
+  function deleteReplacedPhotos(oldO, newO) {
+    var keep = {}; (newO.photos || []).forEach(function (p) { keep[p.id] = 1; });
+    (oldO.photos || []).forEach(function (p) { if (!keep[p.id]) Store.photoDel(p.id).catch(function () {}); });
+  }
+
+  // ---------- photos: viewer options, legacy migration, orphan cleanup ----------
+  function viewerOpts(name) {
+    return { filePrefix: 'cake-' + slug(name || 'photo'),
+      onShared: function (r) { if (r === 'opened') toast('Press and hold the picture to save it to Photos', 4000); },
+      onError: function () { toast('Could not share this photo'); } };
+  }
+  // Old versions stored one downscaled data URL in order.photo – move it into the photos store.
+  function migrateLegacyPhotos(orders) {
+    var changed = false;
+    return orders.reduce(function (p, o) {
+      return p.then(function () {
+        if (!o.photos) { o.photos = []; changed = true; }
+        if (typeof o.photo !== 'string' || o.photo.indexOf('data:') !== 0) { if ('photo' in o && !o.photo) { delete o.photo; changed = true; } return; }
+        var rec;
+        try { rec = PH.recordFromDataURL(o.photo); } catch (e) { return; }
+        return Store.photoPut(rec).then(function () {
+          o.photos.unshift({ id: rec.id, caption: '' }); delete o.photo; changed = true;
+        }).catch(function () { /* keep legacy field if storage fails */ });
+      });
+    }, Promise.resolve()).then(function () { return changed; });
+  }
+  function sweepOrphanPhotos() {
+    var used = {};
+    state.orders.forEach(function (o) { (o.photos || []).forEach(function (p) { used[p.id] = 1; }); });
+    return Store.photoKeys().then(function (keys) {
+      return Promise.all(keys.filter(function (k) { return !used[k]; }).map(function (k) { return Store.photoDel(k); }));
+    }).catch(function () {});
+  }
+  function deleteOrderPhotos(o) { (o.photos || []).forEach(function (p) { Store.photoDel(p.id).catch(function () {}); }); }
 
   // ---------- events ----------
   function icsName(o) { return 'cake-' + slug(o.name) + '-' + o.dueDate + '.ics'; }
@@ -673,6 +750,7 @@
       if ((el = t.closest('[data-back]'))) { e.preventDefault(); goBack(); return; }
       if ((el = t.closest('[data-go]'))) { location.hash = el.dataset.go; return; }
       if ((el = t.closest('[data-newon]'))) { e.preventDefault(); pendingDraft = { _newOn: el.dataset.newon }; location.hash = '#/new'; return; }
+      if ((el = t.closest('[data-photo-open]'))) { var po = getOrder(el.dataset.photoOpen); if (po) PH.open(po.photos, +el.dataset.i, viewerOpts(po.name)); return; }
       if ((el = t.closest('[data-open]'))) { location.hash = '#/order/' + el.dataset.open; return; }
       if ((el = t.closest('[data-day]'))) {
         calState.selected = el.dataset.day; var d = parseISO(el.dataset.day);
@@ -689,7 +767,7 @@
       if ((el = t.closest('[data-delete]'))) {
         var del = getOrder(el.dataset.delete);
         if (del && confirm('Delete the order for ' + (del.name || 'this customer') + '? This cannot be undone.')) {
-          state.orders = state.orders.filter(function (x) { return x.id !== del.id; }); persist(); toast('Order deleted'); location.replace('#/upcoming');
+          state.orders = state.orders.filter(function (x) { return x.id !== del.id; }); persist(); deleteOrderPhotos(del); toast('Order deleted'); location.replace('#/upcoming');
         }
       }
     });
@@ -707,7 +785,7 @@
     $('#wipeAll').onclick = function () {
       if (!state.orders.length) { toast('Nothing to delete'); return; }
       if (confirm('Delete ALL ' + state.orders.length + ' orders from this device?') && confirm('Really delete everything? Consider saving a backup first.')) {
-        state.orders = []; persist(); toast('All orders deleted'); route();
+        state.orders = []; persist(); Store.photoClear().catch(function () {}); toast('All orders deleted'); route();
       }
     };
     $('#bigMic').onclick = function () { if (bigListening) stopBigMic(); else startBigMic(); };
@@ -730,18 +808,35 @@
   }
 
   // ---------- boot ----------
+  var ordersLoaded = false;
   Promise.all([DB.get('orders'), DB.get('settings')]).then(function (res) {
-    state.orders = Array.isArray(res[0]) ? res[0] : [];
+    ordersLoaded = Array.isArray(res[0]);
+    state.orders = ordersLoaded ? res[0] : [];
     if (res[1]) state.settings = Object.assign(state.settings, res[1]);
     if (!state.settings.notified) state.settings.notified = {};
     if (!Array.isArray(state.settings.defaultReminders)) state.settings.defaultReminders = DEFAULT_REMINDERS.slice();
+    return migrateLegacyPhotos(state.orders).then(function (changed) { return changed ? persist() : null; }).catch(function () {});
+  }).then(function () {
     bind(); route(); checkReminders();
+    if (ordersLoaded) sweepOrphanPhotos(); // never sweep if orders could not be read
     document.documentElement.classList.add('ready');
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
   });
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-    window.addEventListener('load', function () { navigator.serviceWorker.register('service-worker.js').catch(function () {}); });
+    var hadController = !!navigator.serviceWorker.controller, reloading = false;
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('service-worker.js').then(function (reg) {
+        // check for a new version whenever the app is brought back to the foreground
+        document.addEventListener('visibilitychange', function () { if (!document.hidden) reg.update().catch(function () {}); });
+      }).catch(function () {});
+    });
+    // a new version took over: reload once so the new code runs (but never while she's filling in a form)
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController || reloading) { hadController = true; return; }
+      if (!document.body.classList.contains('page-open')) { reloading = true; location.reload(); }
+      else toast('Cake Book was updated – it will refresh next time you open it.', 5000);
+    });
     navigator.serviceWorker.addEventListener('message', function (e) { if (e.data && e.data.url) location.hash = e.data.url; });
   }
-  window.CakeApp = { state: state, persist: persist, route: route, buildICS: function () { return ICS.buildICS(state.orders); } };
+  window.CakeApp = { store: Store, photos: PH, state: state, persist: persist, route: route, buildICS: function () { return ICS.buildICS(state.orders); } };
 })();
