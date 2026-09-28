@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Cake Book</title>
+  <meta name="description" content="Schedule and track cake orders">
+  <meta name="theme-color" content="#C8506A">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Cake Book">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="icons/icon.svg" alt="" width="34" height="34"><span id="pageTitle">Cake Book</span></div>
+    <button class="icon-btn" id="installBtn" hidden aria-label="Install app">⤓ Install</button>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main id="main">
+    <!-- UPCOMING -->
+    <section class="view" id="view-upcoming" data-title="Cake Book">
+      <button class="talk-btn" data-go="#/voice"><span class="talk-mic">🎤</span><span><b>Talk to add a cake</b><small>Say the whole order – I'll fill in the form</small></span></button>
+      <button class="btn secondary block" data-go="#/new">＋ Type a new order</button>
+      <div id="upcomingList"></div>
+      <label class="toggle-row"><input type="checkbox" id="showDone"> Show finished orders</label>
+    </section>
+
+    <!-- CALENDAR -->
+    <section class="view" id="view-calendar" data-title="Calendar" hidden>
+      <div class="cal-head">
+        <button class="icon-btn round" id="calPrev" aria-label="Previous month">‹</button>
+        <h2 id="calTitle"></h2>
+        <button class="icon-btn round" id="calNext" aria-label="Next month">›</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+      <button class="btn link" id="calToday">Jump to today</button>
+      <h3 class="day-title" id="calDayTitle"></h3>
+      <div id="calDayList"></div>
+    </section>
+
+    <!-- ALL ORDERS / SEARCH -->
+    <section class="view" id="view-orders" data-title="All orders" hidden>
+      <div class="search-wrap">
+        <input type="search" id="searchInput" placeholder="Search customer name or phone…" autocomplete="off" aria-label="Search orders">
+      </div>
+      <div class="chips" id="statusFilter"></div>
+      <div id="ordersList"></div>
+    </section>
+
+    <!-- SETTINGS / MORE -->
+    <section class="view" id="view-settings" data-title="More" hidden>
+      <div class="card">
+        <h3>🔔 Reminders</h3>
+        <p class="muted" id="notifStatus"></p>
+        <button class="btn" id="notifBtn">Allow notifications</button>
+        <p class="muted small">Phone notifications from a web app only appear while the app is open or recently opened. For reminders that always fire, use <b>Add to my phone's calendar</b> on each order, or export them all below.</p>
+        <h4>Default reminders for new orders</h4>
+        <div id="defaultReminders" class="reminders"></div>
+        <button class="btn secondary small-btn" id="addDefaultReminder">＋ Add reminder</button>
+      </div>
+      <div class="card">
+        <h3>📅 Calendar</h3>
+        <button class="btn block" id="exportIcsUpcoming">Export upcoming cakes to calendar</button>
+        <button class="btn secondary block" id="exportIcsAll">Export ALL orders to calendar</button>
+        <p class="muted small">Downloads an .ics file. Open it and choose “Add All” (iPhone) or open with Google Calendar (Android). Each cake includes its reminder alarms.</p>
+      </div>
+      <div class="card">
+        <h3>💾 Backup</h3>
+        <button class="btn block" id="exportJson">Save backup file</button>
+        <label class="btn secondary block file-btn">Restore from backup…<input type="file" id="importJson" accept="application/json,.json" hidden></label>
+        <p class="muted small" id="storageInfo"></p>
+      </div>
+      <div class="card">
+        <h3>📲 Install on your phone</h3>
+        <p class="small"><b>iPhone:</b> open in Safari → tap Share <span aria-hidden="true">⬆︎</span> → “Add to Home Screen”.<br><b>Android:</b> Chrome menu ⋮ → “Install app” / “Add to Home screen”.</p>
+      </div>
+      <div class="card danger-zone">
+        <button class="btn danger block" id="wipeAll">Delete all orders</button>
+      </div>
+      <p class="muted small center">Cake Book · data stays on this device</p>
+    </section>
+  </main>
+
+  <!-- Full-screen pages -->
+  <section class="page" id="page-detail" hidden></section>
+
+  <section class="page" id="page-voice" hidden>
+    <div class="page-head"><button class="icon-btn" data-back>‹ Back</button><h2>Talk to add a cake</h2><span></span></div>
+    <div class="page-body">
+      <p class="muted center" id="voiceHint">Tap the microphone and say the whole order, e.g.<br><i>“Sarah Johnson, 555-123-4567, birthday cake for Saturday October 10th at 2pm, chocolate with strawberry filling, 8 inch two tier, pink buttercream, says Happy 6th Birthday Emma, pickup, $85, $20 deposit.”</i></p>
+      <div class="big-mic-wrap">
+        <button class="big-mic" id="bigMic" aria-label="Start talking">🎤</button>
+        <div class="mic-status" id="micStatus">Tap to start</div>
+      </div>
+      <div class="unsupported" id="voiceUnsupported" hidden>
+        <b>Voice typing tip:</b> this browser can't listen directly. Tap in the box below and press the <b>🎤 microphone key on your keyboard</b> to dictate, then tap “Fill in the order”.
+      </div>
+      <label class="field-label" for="transcript">What you said (you can fix it here)</label>
+      <textarea id="transcript" rows="6" placeholder="Your words will appear here…"></textarea>
+      <div class="interim" id="interim"></div>
+      <button class="btn block big" id="parseBtn">✨ Fill in the order</button>
+      <button class="btn link" id="clearTranscript">Clear</button>
+    </div>
+  </section>
+
+  <section class="page" id="page-form" hidden>
+    <div class="page-head"><button class="icon-btn" data-back>✕ Cancel</button><h2 id="formTitle">New order</h2><button class="icon-btn strong" id="saveTop">Save</button></div>
+    <form class="page-body" id="orderForm" novalidate autocomplete="off"></form>
+  </section>
+
+  <nav class="tabbar" aria-label="Main">
+    <a href="#/upcoming" data-tab="upcoming"><span>🗓️</span>Upcoming</a>
+    <a href="#/calendar" data-tab="calendar"><span>📆</span>Calendar</a>
+    <a href="#/voice" class="tab-mic" aria-label="Talk to add a cake"><span>🎤</span></a>
+    <a href="#/orders" data-tab="orders"><span>🔎</span>Orders</a>
+    <a href="#/settings" data-tab="settings"><span>⚙️</span>More</a>
+  </nav>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="parser.js"></script>
+  <script src="ics.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
