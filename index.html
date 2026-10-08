@@ -28,7 +28,7 @@
     <!-- UPCOMING -->
     <section class="view" id="view-upcoming" data-title="Cake Book">
       <button class="talk-btn" data-go="#/voice"><span class="talk-mic">🎤</span><span><b>Talk to add an order</b><small>Cake, cupcakes or cream pies – say it all, I'll fill in the form</small></span></button>
-      <button class="btn secondary block" data-go="#/new">＋ Type a new order</button>
+      <div class="two-btn"><button class="btn secondary" data-go="#/new">⌨️ Type an order</button><button class="btn secondary" data-new-bulk>👥 Bulk order</button></div>
       <div class="chips type-chips" id="typeChips" role="toolbar" aria-label="Show"></div>
       <div id="upcomingList"></div>
       <label class="toggle-row"><input type="checkbox" id="showDone"> Show finished orders</label>
@@ -76,7 +76,9 @@
         <h3>💬 Confirmation texts</h3>
         <label class="field-label" for="signatureInput">Your name or bakery name (optional)</label>
         <input type="text" id="signatureInput" class="text-input" placeholder="e.g. Kim’s Cakes" autocapitalize="words" maxlength="60">
-        <p class="muted small">Each order has a <b>Text for confirmation</b> button. It opens Messages with the order details already typed out, starting “Hi Sarah! This is <i>your name</i>.” You just tap send.</p>
+        <label class="field-label" for="payInfoInput">How people can pay (optional)</label>
+        <input type="text" id="payInfoInput" class="text-input" placeholder="e.g. Venmo @KimsCakes or cash" maxlength="100">
+        <p class="muted small">Each order has a <b>Text for confirmation</b> button. It opens Messages with the order details already typed out, starting “Hi Sarah! This is <i>your name</i>.” You just tap send. When money is still owed, texts add “You can pay with …”.</p>
       </div>
       <div class="card">
         <h3>📅 Calendar</h3>
@@ -136,6 +138,8 @@
     <a href="#/orders" data-tab="orders"><span>🔎</span>Orders</a>
     <a href="#/settings" data-tab="settings"><span>⚙️</span>More</a>
   </nav>
+
+  <div class="sheet-wrap" id="sheetWrap" hidden><div class="sheet-backdrop" data-sheet-close></div><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 

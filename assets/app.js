@@ -23,13 +23,15 @@
   // Fields: types = which product types show the field (default: all); labels / lists = per-type label and suggestions.
   var CU = ['cupcakes'], CP = ['creampies'], CK = ['cake'], BAKED = ['cupcakes', 'creampies'];
   var FORM = [
-    { title: '🍰 What are they ordering?', fields: [{ k: 'productType', type: 'typepicker' }] },
+    { title: '🍰 What are they ordering?', fields: [{ k: 'productType', type: 'typepicker' },
+      { k: 'bulk', type: 'switch', label: '👥 Bulk / group order', hint: 'Lots of people, each with their own dozens and payment (fundraisers, offices, teams)', types: BAKED }] },
     { title: '👤 Customer', fields: [
-      { k: 'name', label: 'Customer name *', type: 'text', cap: 'words' },
-      { k: 'phone', label: 'Phone', type: 'tel' },
+      { k: 'name', label: 'Customer name *', labels: { bulk: 'Group or fundraiser name *' }, type: 'text', cap: 'words' },
+      { k: 'organizer', label: 'Organizer (contact person)', type: 'text', cap: 'words', bulk: 'only' },
+      { k: 'phone', label: 'Phone', labels: { bulk: 'Organizer phone' }, type: 'tel' },
       { k: 'email', label: 'Email', type: 'email' },
       { k: 'fulfillment', label: 'Pickup or delivery', type: 'segmented', options: [['pickup', '🏠 Pickup'], ['delivery', '🚗 Delivery']] },
-      { k: 'address', label: 'Delivery address', type: 'textarea', rows: 2, showIf: 'delivery' },
+      { k: 'address', label: 'Delivery address', labels: { bulk: 'Pickup spot / delivery address' }, type: 'textarea', rows: 2, showIf: 'delivery', bulkShow: true },
       { k: 'customerNotes', label: 'Notes (private – not texted)', type: 'textarea', rows: 2 }
     ] },
     { title: '🎂 Cake', product: true, fields: [
@@ -37,22 +39,23 @@
       { k: 'dueDate', label: 'Due date *', type: 'date' },
       { row: [{ k: 'dueTime', label: 'Time', type: 'time' }, { k: 'tiers', label: 'Tiers', type: 'number', min: 1, max: 9, types: CK },
         { k: 'itemSize', label: 'Size', type: 'select', optionsBy: { cupcakes: CUP_SIZES, creampies: CP_SIZES }, types: BAKED }] },
-      { row: [{ k: 'qty', label: 'How many', type: 'qty', types: BAKED }, { k: 'qtyUnit', label: 'Counted in', type: 'segmented', options: [['dozen', 'Dozen'], ['each', 'Each']], types: BAKED, small: true }] },
+      { row: [{ k: 'qty', label: 'How many', type: 'qty', types: BAKED, bulk: 'hide' }, { k: 'qtyUnit', label: 'Counted in', type: 'segmented', options: [['dozen', 'Dozen'], ['each', 'Each']], types: BAKED, small: true, bulk: 'hide' }] },
       { k: 'size', label: 'Size', type: 'text', list: SIZE_LIST, types: CK },
       { row: [{ k: 'servings', label: 'Servings', type: 'number', min: 1, types: CK }, { k: 'shape', label: 'Shape', type: 'select', options: SHAPES, types: CK }] },
-      { k: 'flavor', label: 'Cake flavor', labels: { cupcakes: 'Cupcake flavor(s)', creampies: 'Cookie flavor' }, type: 'text', list: FLAVOR_LIST, lists: { cupcakes: CUP_FLAVOR_LIST, creampies: COOKIE_LIST }, cap: 'sentences' },
-      { k: 'filling', label: 'Filling', labels: { creampies: 'Filling flavor' }, type: 'text', list: FILLING_LIST, lists: { creampies: CP_FILLING_LIST }, cap: 'sentences' },
+      { k: 'flavor', label: 'Cake flavor', labels: { cupcakes: 'Cupcake flavor(s)', creampies: 'Cookie flavor', bulk_cupcakes: 'Default cupcake flavor', bulk_creampies: 'Default cookie flavor' }, type: 'text', list: FLAVOR_LIST, lists: { cupcakes: CUP_FLAVOR_LIST, creampies: COOKIE_LIST }, cap: 'sentences' },
+      { k: 'filling', label: 'Filling', labels: { creampies: 'Filling flavor', bulk: 'Default filling' }, type: 'text', list: FILLING_LIST, lists: { creampies: CP_FILLING_LIST }, cap: 'sentences' },
       { k: 'frosting', label: 'Frosting', type: 'text', list: FROSTING_LIST, cap: 'sentences', types: ['cake', 'cupcakes'] },
       { k: 'design', label: 'Colors / design', labels: { cupcakes: 'Decorations / toppers' }, type: 'textarea', rows: 3, types: ['cake', 'cupcakes'] },
       { k: 'liners', label: 'Liners / colors', type: 'text', list: LINER_LIST, cap: 'sentences', types: CU },
       { k: 'wrapped', label: 'Individually wrapped?', type: 'segmented', options: [['yes', '✓ Yes'], ['no', 'No']], types: CP },
       { k: 'packaging', label: 'Packaging', type: 'text', list: PACKAGING_LIST, cap: 'sentences', types: CP },
-      { k: 'message', label: 'Message on cake', labels: { cupcakes: 'Message / writing' }, type: 'text', cap: 'sentences', types: ['cake', 'cupcakes'] },
+      { k: 'message', label: 'Message on cake', labels: { cupcakes: 'Message / writing' }, type: 'text', cap: 'sentences', types: ['cake', 'cupcakes'], bulk: 'hide' },
       { k: 'allergies', label: 'Allergies / dietary', type: 'text' }
     ] },
     { title: '💵 Price & status', fields: [
-      { row: [{ k: 'price', label: 'Price ($)', type: 'money' }, { k: 'deposit', label: 'Deposit paid ($)', type: 'money' }] },
-      { k: '_balance', type: 'balance' },
+      { row: [{ k: 'price', label: 'Price ($)', type: 'money', bulk: 'hide' }, { k: 'deposit', label: 'Deposit paid ($)', type: 'money', bulk: 'hide' }] },
+      { row: [{ k: 'pricePerDozen', label: 'Price per dozen ($)', type: 'money', bulk: 'only' }, { k: 'pricePerHalf', label: 'Half dozen ($, optional)', type: 'money', bulk: 'only' }] },
+      { k: '_balance', type: 'balance', bulk: 'hide' },
       { k: 'status', label: 'Status', type: 'select', options: STATUSES }
     ] }
   ];
@@ -202,6 +205,9 @@
         var d = P.parseDateTime(said);
         if (d.date) input.value = d.date; else toast('Could not understand that date: “' + said + '”');
         if (d.time && input.form && input.form.dueTime && !input.form.dueTime.value) input.form.dueTime.value = d.time;
+      } else if (kind === 'dozen') {
+        var bl = P.parseBulkLine('x ' + said);
+        if (bl && bl.dozen !== '') input.value = bl.dozen; else toast('Could not understand that amount: “' + said + '”');
       } else if (kind === 'qty') {
         var q = P.parseQuantity(said);
         if (q) { input.value = q.qty; var u = input.form && input.form.querySelector('input[name=qtyUnit][value=' + q.unit + ']'); if (u) u.checked = true; }
@@ -218,7 +224,7 @@
   var navCount = 0, pendingDraft = null;
   var calState = { month: new Date(new Date().getFullYear(), new Date().getMonth(), 1), selected: iso(new Date()) };
   function route() {
-    stopActive(); if (bigListening) stopBigMic(); PH.close();
+    stopActive(); if (bigListening) stopBigMic(); PH.close(); if (!$('#sheetWrap').hidden) closeSheet();
     var h = location.hash || '#/upcoming';
     var parts = h.slice(2).split('?')[0].split('/');
     $$('.page').forEach(function (p) { p.hidden = true; });
@@ -248,14 +254,14 @@
     var timeBox = opts.showDate
       ? '<div class="time">' + esc(o.dueDate ? fmtDate(o.dueDate, { month: 'short', day: 'numeric' }) : '—') + '<small>' + esc(t || (o.dueDate ? parseISO(o.dueDate).getFullYear() : '')) + '</small></div>'
       : '<div class="time">' + (t ? esc(t.replace(ampm, '')) + '<small>' + esc(ampm.trim()) + '</small>' : '<small>All day</small>') + '</div>';
-    var bal = balance(o);
+    var bal = PR.isBulk(o) ? PR.bulkTotals(o).outstanding : balance(o);
     return '<div class="order-card' + (overdue ? ' overdue' : '') + '" role="button" tabindex="0" data-open="' + esc(o.id) + '">' + timeBox +
       '<div class="info"><div class="name">' + orderEmoji(o) + ' ' + esc(o.name || 'Unnamed') + '</div>' +
       '<div class="desc">' + esc([o.occasion, desc].filter(Boolean).join(' – ') || (isCake ? 'No cake details yet' : PR.productPhrase(o))) + '</div>' +
-      '<div class="meta">' + typePill(o) + '<span class="pill ' + statusClass(o.status) + '">' + esc(o.status) + '</span>' +
+      '<div class="meta">' + typePill(o) + (PR.isBulk(o) ? '<span class="pill bulk-pill">👥 Bulk</span>' : '') + '<span class="pill ' + statusClass(o.status) + '">' + esc(o.status) + '</span>' +
       '<span class="pill plain">' + (o.fulfillment === 'delivery' ? '🚗 Delivery' : '🏠 Pickup') + '</span>' +
       (o.allergies ? '<span class="pill warn">⚠ Allergy</span>' : '') +
-      (bal > 0 ? '<span class="pill plain">Due ' + money(bal) + '</span>' : '') +
+      (bal > 0 && !PR.isBulk(o) ? '<span class="pill plain">Due ' + money(bal) + '</span>' : '') +
       (nPhotos(o) ? '<span class="pill photo-pill" aria-label="' + nPhotos(o) + ' photos">📷 ' + nPhotos(o) + '</span>' : '') +
       confirmPill(o) + (overdue ? '<span class="pill warn">Past due</span>' : '') + '</div></div>' +
       (nPhotos(o) ? '<img class="thumb" data-pid="' + esc(o.photos[0].id) + '" alt="">' : '') +
@@ -311,7 +317,7 @@
     if (!html && typeFilter !== 'all' && state.orders.length) html = emptyHTML('No ' + PR.TYPES[typeFilter].plural.toLowerCase() + ' coming up', 'Tap <b>All</b> to see every order.');
     if (!html) html = state.orders.length
       ? emptyHTML('All caught up!', 'No upcoming orders. Tap “Talk to add an order” when the next one comes in.')
-      : emptyHTML('No cake orders yet', 'Tap <b>🎤 Talk to add a cake</b> and just say the order,<br>or type it in with <b>＋ Type a new order</b>.');
+      : emptyHTML('No cake orders yet', 'Tap <b>🎤 Talk to add a cake</b> and just say the order,<br>or type it in with <b>⌨️ Type an order</b>.');
     $('#upcomingList').innerHTML = html;
     PH.hydrate($('#upcomingList'));
   }
@@ -348,7 +354,8 @@
     var list = state.orders.filter(function (o) {
       if (orderFilter !== 'All' && o.status !== orderFilter) return false;
       if (!q) return true;
-      return (o.name || '').toLowerCase().indexOf(q) >= 0 || (qd.length >= 3 && (o.phone || '').replace(/\D/g, '').indexOf(qd) >= 0);
+      var hit = function (n, ph) { return (n || '').toLowerCase().indexOf(q) >= 0 || (qd.length >= 3 && (ph || '').replace(/\D/g, '').indexOf(qd) >= 0); };
+      return hit(o.name, o.phone) || (o.organizer && hit(o.organizer, '')) || (PR.isBulk(o) && (o.people || []).some(function (p) { return hit(p.name, p.phone); }));
     }).sort(function (a, b) { return byDue(b, a); });
     $('#ordersList').innerHTML = list.length ? list.map(function (o) { return cardHTML(o, { showDate: true }); }).join('')
       : (state.orders.length ? emptyHTML('No matches', 'No orders match “' + esc(q) + '”.') : emptyHTML('No orders yet', 'Orders you add will show up here.'));
@@ -372,13 +379,14 @@
       '<div class="detail-hero"><div class="hero-emoji">' + orderEmoji(o) + '</div>' +
       '<div class="hero-product">' + esc(PR.productPhrase(o)) + '</div>' +
       '<div class="when">' + esc(fmtDate(o.dueDate)) + (o.dueTime ? ' · ' + esc(fmtTime(o.dueTime)) : '') + '</div>' +
-      '<div class="sub">' + esc([o.occasion, relDay(o.dueDate), o.fulfillment === 'delivery' ? '🚗 Delivery' : '🏠 Pickup'].filter(Boolean).join(' · ')) + '</div></div>' +
+      '<div class="sub">' + esc([PR.isBulk(o) ? '👥 Bulk order' : '', o.occasion, relDay(o.dueDate), o.fulfillment === 'delivery' ? '🚗 Delivery' : '🏠 Pickup'].filter(Boolean).join(' · ')) + '</div></div>' +
       '<div class="action-row">' +
       (o.phone ? '<a href="' + telHref(o.phone) + '"><span>📞</span>Call</a><a href="' + smsHref(o.phone) + '"><span>💬</span>Text</a>' : '') +
       (o.email ? '<a href="mailto:' + esc(o.email) + '"><span>✉️</span>Email</a>' : '') +
       (mapUrl ? '<a href="' + mapUrl + '" target="_blank" rel="noopener"><span>🗺️</span>Map</a>' : '') +
       '<button data-ics="' + esc(o.id) + '"><span>📅</span>Calendar</button></div>' +
       (o.allergies ? '<div class="allergy">⚠️ Allergies / dietary: ' + esc(o.allergies) + '</div>' : '') +
+      (PR.isBulk(o) ? bulkCardHTML(o) : '') +
       confirmCardHTML(o) +
       '<div class="card"><h4 class="mt0">Status</h4><div class="status-picker">' + STATUSES.map(function (s) { return '<button class="' + statusClass(s) + (o.status === s ? ' on' : '') + '" data-status="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div></div>' +
       '<div class="card"><h3>📷 Photos' + (nPhotos(o) ? ' <span class="count">' + nPhotos(o) + '</span>' : '') + '</h3>' +
@@ -387,9 +395,9 @@
           (p.caption ? '<span class="ph-cap">' + esc(p.caption) + '</span>' : '') + '</button>';
       }).join('') + '</div>' : '<p class="muted small">No photos yet. <a href="#/edit/' + esc(o.id) + '">Add the picture the customer sent</a></p>') + '</div>' +
       productCardHTML(o, row) +
-      '<div class="card"><h3>💵 Money</h3><dl class="kv">' + row('Price', money(o.price)) + row('Deposit paid', money(o.deposit)) + '</dl>' +
-      '<div class="balance-box"><span>Balance due</span><span>' + (o.status === 'Paid' ? 'Paid in full ✓' : money(balance(o))) + '</span></div></div>' +
-      '<div class="card"><h3>👤 Customer</h3><dl class="kv">' + row('Name', esc(o.name)) +
+      (PR.isBulk(o) ? '' : '<div class="card"><h3>💵 Money</h3><dl class="kv">' + row('Price', money(o.price)) + row('Deposit paid', money(o.deposit)) + '</dl>' +
+      '<div class="balance-box"><span>Balance due</span><span>' + (o.status === 'Paid' ? 'Paid in full ✓' : money(balance(o))) + '</span></div></div>') +
+      '<div class="card"><h3>👤 ' + (PR.isBulk(o) ? 'Group' : 'Customer') + '</h3><dl class="kv">' + row(PR.isBulk(o) ? 'Group' : 'Name', esc(o.name)) + (PR.isBulk(o) ? row('Organizer', esc(o.organizer)) : '') +
       row('Phone', o.phone ? '<a href="' + telHref(o.phone) + '">' + esc(o.phone) + '</a>' : '') + row('Email', o.email ? '<a href="mailto:' + esc(o.email) + '">' + esc(o.email) + '</a>' : '') +
       row('Handoff', o.fulfillment === 'delivery' ? 'Delivery' : 'Pickup') + row('Address', esc(o.address)) + row('Notes', esc(o.customerNotes).replace(/\n/g, '<br>')) + '</dl></div>' +
       '<div class="card"><h3>🔔 Reminders</h3>' + (rems ? '<ul class="rem-list">' + rems + '</ul>' : '<p class="muted">No reminders.</p>') +
@@ -400,21 +408,320 @@
       '<p class="muted small center">Added ' + esc(new Date(o.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) + '</p>' +
       '<button class="btn danger block" data-delete="' + esc(o.id) + '">Delete order</button></div>';
     PH.hydrate(page);
+    if (PR.isBulk(o)) renderPeople(o);
     return page;
+  }
+
+  // ---------- bulk orders: people list, totals, texts ----------
+  var CONTACTS_OK = 'contacts' in navigator && 'ContactsManager' in window && navigator.contacts && typeof navigator.contacts.select === 'function';
+  var peopleView = { id: null, filter: 'all', sort: 'name', q: '' };
+  function textOpts() { return { signature: state.settings.signature, payInfo: state.settings.payInfo }; }
+  function getPerson(o, pid) { return (o.people || []).find(function (p) { return p.id === pid; }); }
+  function pid() { return 'pp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function bulkCardHTML(o) {
+    if (peopleView.id !== o.id) peopleView = { id: o.id, filter: 'all', sort: 'name', q: '' };
+    var bt = PR.bulkTotals(o), priced = !bt.noPrice || bt.owed > 0, noun = PR.typeOf(o) === 'cupcakes' ? 'cupcakes' : 'cookies';
+    function tile(label, val, sub, cls) { return '<div class="bt' + (cls ? ' ' + cls : '') + '"><span class="bt-l">' + label + '</span><b>' + val + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; }
+    var tiles = tile('People', bt.people) + tile('Dozen', PR.dz(bt.dozen).replace(' dozen', ''), bt.cookies + ' ' + noun) +
+      tile('Picked up', bt.pickedUp + '<span class="of">/' + bt.people + '</span>', bt.people && bt.pickedUp === bt.people ? 'everyone ✓' : '') +
+      (priced ? tile('Collected', money(bt.collected), 'of ' + money(bt.owed)) + tile('Outstanding', money(bt.outstanding), bt.unpaid + ' unpaid', bt.outstanding > 0 ? 'warn' : 'good')
+        : tile('Unpaid', bt.unpaid, 'people', bt.unpaid ? 'warn' : 'good'));
+    var bake = bt.flavors.length ? '<div class="bake-list"><span>🥣 To bake</span>' + bt.flavors.map(function (f) { return '<span class="bake-f"><b>' + esc(f.flavor) + '</b> ' + esc(PR.dz(f.dozen)) + '</span>'; }).join('') + '</div>' : '';
+    var unpaidWithPhone = (o.people || []).filter(function (p) { return p.phone && PR.personMoney(o, p).state !== 'paid'; }).length;
+    return '<div class="card bulk-card" id="bulkCard"><h3>👥 People &amp; payments</h3>' +
+      '<div class="bulk-totals">' + tiles + '</div>' +
+      (!priced && bt.people ? '<p class="muted small">Tip: add a <a href="#/edit/' + esc(o.id) + '">price per dozen</a> to track who owes what.</p>' : '') + bake +
+      '<div class="two-btn"><button class="btn" data-person-add="' + esc(o.id) + '">＋ Add person</button><button class="btn secondary" data-paste-open="' + esc(o.id) + '">📋 Paste a list</button></div>' +
+      (bt.people ? '<div class="bulk-actions">' +
+        '<button data-walk="unpaid"' + (unpaidWithPhone ? '' : ' disabled') + '><span>💬</span>Remind unpaid' + (unpaidWithPhone ? ' (' + unpaidWithPhone + ')' : '') + '</button>' +
+        '<button data-walk="ready"><span>📣</span>Ready texts</button>' +
+        '<button data-share-list="' + esc(o.id) + '"><span>📤</span>Share list</button>' +
+        '<button data-bulk-more="' + esc(o.id) + '"><span>⋯</span>More</button></div>' +
+        '<div class="chips people-filter" id="peopleFilter"></div>' +
+        (bt.people > 8 ? '<input type="search" class="text-input people-search" id="peopleSearch" placeholder="Find a name or number…" value="' + esc(peopleView.q) + '" aria-label="Find a person">' : '') +
+        '<div id="peopleList" class="people-list"></div>'
+        : '<p class="muted center small">No one yet. Add people one at a time, or paste a list like:<br><i>Jane Doe 555-123-4567 2 dozen paid</i></p>') +
+      '</div>';
+  }
+  function renderPeople(o) {
+    var box = $('#peopleList'); if (!box) return;
+    var all = o.people || [], unpaid = 0, notPicked = 0;
+    all.forEach(function (p) { if (PR.personMoney(o, p).state !== 'paid') unpaid++; if (!p.pickedUp) notPicked++; });
+    $('#peopleFilter').innerHTML = [['all', 'All', all.length], ['unpaid', 'Unpaid', unpaid], ['notpicked', 'Not picked up', notPicked]].map(function (c) {
+      return '<button class="chip' + (peopleView.filter === c[0] ? ' on' : '') + '" data-pfilter="' + c[0] + '">' + c[1] + ' <span class="chip-n">' + c[2] + '</span></button>';
+    }).join('') + '<button class="chip sort-chip" data-psort aria-label="Sort">' + (peopleView.sort === 'name' ? '↕︎ A–Z' : '↕︎ Added') + '</button>';
+    var q = peopleView.q.trim().toLowerCase(), qd = q.replace(/\D/g, '');
+    var list = PR.sortedPeople(o, peopleView.sort).filter(function (p) {
+      if (peopleView.filter === 'unpaid' && PR.personMoney(o, p).state === 'paid') return false;
+      if (peopleView.filter === 'notpicked' && p.pickedUp) return false;
+      if (!q) return true;
+      return String(p.name || '').toLowerCase().indexOf(q) >= 0 || (qd.length >= 3 && String(p.phone || '').replace(/\D/g, '').indexOf(qd) >= 0);
+    });
+    box.innerHTML = list.length ? list.map(function (p) { return personRowHTML(o, p); }).join('')
+      : '<p class="muted center small">' + (all.length ? (peopleView.filter === 'unpaid' ? 'Everyone has paid 🎉' : peopleView.filter === 'notpicked' ? 'Everyone has picked up 🎉' : 'No matches.') : '') + '</p>';
+  }
+  function personRowHTML(o, p) {
+    var m = PR.personMoney(o, p);
+    var amt = m.owed === null ? '' : m.state === 'paid' ? money(m.collected) : m.state === 'partial' ? money(m.outstanding) + ' due' : money(m.owed);
+    var payLbl = m.state === 'paid' ? '✓ Paid' + (p.method ? ' · ' + esc(p.method) : '') : m.state === 'partial' ? '½ Part paid' : '💵 Unpaid';
+    return '<div class="person ps-' + m.state + (p.pickedUp ? ' picked' : '') + '">' +
+      '<button class="p-main" data-person-edit="' + esc(p.id) + '" aria-label="Edit ' + esc(p.name || 'person') + '">' +
+      '<span class="p-top"><span class="p-name">' + esc(p.name || p.phone || 'No name') + '</span><span class="p-amt">' + amt + '</span></span>' +
+      '<span class="p-sub">' + esc([PR.dz(p.dozen), p.flavor, p.note ? '📝 ' + p.note : ''].filter(Boolean).join(' · ')) + '</span></button>' +
+      '<div class="p-actions"><button class="p-pay" data-person-pay="' + esc(p.id) + '">' + payLbl + '</button>' +
+      '<button class="p-pick" data-person-pick="' + esc(p.id) + '" aria-pressed="' + !!p.pickedUp + '">' + (p.pickedUp ? '📦 Picked up ✓' : '📦 Not picked up') + '</button>' +
+      (p.phone ? '<a class="p-text" href="' + esc(PR.smsLink(p.phone, PR.personText(o, p, textOpts()), IS_IOS)) + '" data-person-text="' + esc(p.id) + '" aria-label="Text ' + esc(p.name) + '">💬</a>' : '') +
+      '</div></div>';
+  }
+  function bulkChanged(o, msg) {
+    o.updatedAt = Date.now(); persist(); Push.markDirty(o.id);
+    var pg = $('#page-detail'), y = pg.scrollTop; renderDetail(o.id); pg.scrollTop = y;
+    if (msg) toast(msg);
+  }
+  // ---- bottom sheet ----
+  function openSheet(html, bindFn) {
+    var w = $('#sheetWrap'), sh = $('#sheet');
+    sh.innerHTML = html; w.hidden = false; document.body.classList.add('sheet-open');
+    sh.onclick = sh.oninput = sh.onchange = sh.onsubmit = null;
+    if (bindFn) bindFn(sh);
+    sh.scrollTop = 0;
+  }
+  function closeSheet() { stopActive(); $('#sheetWrap').hidden = true; document.body.classList.remove('sheet-open'); $('#sheet').innerHTML = ''; }
+  function sheetHead(title) { return '<div class="sheet-head"><h3>' + title + '</h3><button class="icon-btn" data-sheet-close aria-label="Close">✕</button></div>'; }
+  function micBtn(id, label) { return '<button type="button" class="mic" data-mic="' + id + '" aria-label="Dictate ' + esc(label) + '">🎤</button>'; }
+  function flavorListFor(o) { return PR.typeOf(o) === 'cupcakes' ? CUP_FLAVOR_LIST : COOKIE_LIST; }
+
+  function personSheet(o, p, keepOpenMsg) {
+    var isNew = !p;
+    p = p || { dozen: 1, paid: false, pickedUp: false };
+    var html = sheetHead(isNew ? 'Add person' : 'Edit ' + esc(p.name || 'person')) + '<form id="personForm" novalidate autocomplete="off">' +
+      (keepOpenMsg ? '<p class="added-note">' + esc(keepOpenMsg) + '</p>' : '') +
+      '<div class="field"><label for="pp_name">Name</label><div class="input-wrap"><input id="pp_name" name="name" type="text" data-kind="text" autocapitalize="words" value="' + esc(p.name || '') + '">' + micBtn('pp_name', 'name') +
+      (CONTACTS_OK ? '<button type="button" class="mic" data-contact-one aria-label="Pick from contacts">📇</button>' : '') + '</div></div>' +
+      '<div class="field"><label for="pp_phone">Phone</label><div class="input-wrap"><input id="pp_phone" name="phone" type="tel" inputmode="tel" data-kind="tel" value="' + esc(p.phone || '') + '">' + micBtn('pp_phone', 'phone') + '</div></div>' +
+      '<div class="field"><label for="pp_dozen">How many dozen</label><div class="stepper"><button type="button" data-step="-0.5" aria-label="Half dozen less">−</button>' +
+      '<input id="pp_dozen" name="dozen" type="text" inputmode="decimal" data-kind="dozen" value="' + esc(p.dozen === '' ? '' : p.dozen) + '"><button type="button" data-step="0.5" aria-label="Half dozen more">＋</button>' + micBtn('pp_dozen', 'how many dozen') + '</div>' +
+      '<div class="quick-dz">' + [0.5, 1, 2, 3, 4, 6].map(function (n) { return '<button type="button" data-setdz="' + n + '">' + (n === 0.5 ? '½' : n) + '</button>'; }).join('') + '</div>' +
+      '<p class="owes" id="pp_owes"></p></div>' +
+      '<div class="field"><label for="pp_flavor">Flavor <span class="muted">(if not ' + esc(PR.defaultFlavor(o)) + ')</span></label><div class="input-wrap"><input id="pp_flavor" name="flavor" type="text" data-kind="text" list="pp_fl" autocapitalize="sentences" placeholder="' + esc(PR.defaultFlavor(o)) + '" value="' + esc(p.flavor || '') + '">' + micBtn('pp_flavor', 'flavor') + '</div>' +
+      '<datalist id="pp_fl">' + flavorListFor(o).map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist></div>' +
+      '<div class="field"><span class="field-label">Payment</span><div class="segmented"><label><input type="radio" name="paid" value="no"' + (p.paid ? '' : ' checked') + '><span>💵 Not paid</span></label><label><input type="radio" name="paid" value="yes"' + (p.paid ? ' checked' : '') + '><span>✓ Paid</span></label></div></div>' +
+      '<div id="pp_payinfo"' + (p.paid ? '' : ' hidden') + '><div class="method-chips">' + PR.PAY_METHODS.map(function (mth) { return '<label><input type="radio" name="method" value="' + mth + '"' + (p.method === mth ? ' checked' : '') + '><span>' + mth + '</span></label>'; }).join('') + '</div>' +
+      '<div class="field"><label for="pp_amount">Amount paid <span class="muted">(only if different)</span></label><div class="input-wrap"><input id="pp_amount" name="amount" type="text" inputmode="decimal" data-kind="money" placeholder="" value="' + esc(p.amount == null ? '' : p.amount) + '"></div></div></div>' +
+      '<div class="field switch-field"><label class="switch"><input type="checkbox" name="pickedUp"' + (p.pickedUp ? ' checked' : '') + '><span class="sw" aria-hidden="true"></span><span class="sw-text"><b>📦 ' + (o.fulfillment === 'delivery' ? 'Delivered' : 'Picked up') + '</b></span></label></div>' +
+      '<div class="field"><label for="pp_note">Note</label><div class="input-wrap"><input id="pp_note" name="note" type="text" data-kind="text" autocapitalize="sentences" value="' + esc(p.note || '') + '">' + micBtn('pp_note', 'note') + '</div></div>' +
+      '<button type="submit" class="btn block big">' + (isNew ? '＋ Add' : '💾 Save') + '</button>' +
+      (isNew ? '<button type="button" class="btn secondary block" data-save-another>Add &amp; next person</button>' : '<button type="button" class="btn danger block" data-person-delete>Delete ' + esc(p.name || 'person') + '</button>') +
+      '</form>';
+    openSheet(html, function (sh) {
+      var f = $('#personForm'), E = f.elements;
+      function dozenVal() { var v = parseFloat(String(E.dozen.value).replace(',', '.')); return isNaN(v) ? '' : Math.max(v, 0); }
+      function upd() {
+        var paid = (f.querySelector('input[name=paid]:checked') || {}).value === 'yes';
+        $('#pp_payinfo').hidden = !paid;
+        var owed = PR.personOwed(o, { dozen: dozenVal() === '' ? 1 : dozenVal() });
+        $('#pp_owes').textContent = owed === null ? '' : 'Owes ' + money(owed) + (PR.priceText(o) ? ' (' + PR.priceText(o) + ')' : '');
+        E.amount.placeholder = owed === null ? '' : money(owed);
+      }
+      upd();
+      sh.oninput = sh.onchange = upd;
+      sh.onclick = function (e) {
+        var b;
+        if ((b = e.target.closest('[data-mic]'))) { e.preventDefault(); micForField(b, document.getElementById(b.dataset.mic)); return; }
+        if ((b = e.target.closest('[data-step]'))) { var nv = Math.max((dozenVal() || 0) + parseFloat(b.dataset.step), 0.5); E.dozen.value = nv; upd(); return; }
+        if ((b = e.target.closest('[data-setdz]'))) { E.dozen.value = b.dataset.setdz; upd(); return; }
+        if (e.target.closest('[data-contact-one]')) {
+          navigator.contacts.select(['name', 'tel'], { multiple: false }).then(function (r) {
+            if (r && r[0]) { if (r[0].name && r[0].name[0]) E.name.value = r[0].name[0]; if (r[0].tel && r[0].tel[0]) E.phone.value = P.formatPhone(r[0].tel[0]); }
+          }).catch(function () {});
+          return;
+        }
+        if (e.target.closest('[data-save-another]')) { save(true); return; }
+        if (e.target.closest('[data-person-delete]')) {
+          if (!confirm('Remove ' + (p.name || 'this person') + ' from the list?')) return;
+          o.people = o.people.filter(function (x) { return x.id !== p.id; }); closeSheet(); bulkChanged(o, (p.name || 'Person') + ' removed');
+        }
+      };
+      f.onsubmit = function (e) { e.preventDefault(); save(false); };
+      function save(another) {
+        var name = E.name.value.trim(), phone = E.phone.value.trim();
+        if (!name && !phone) { toast('Add a name (or phone number)'); E.name.focus(); return; }
+        var paid = (f.querySelector('input[name=paid]:checked') || {}).value === 'yes';
+        var amt = parseFloat(String(E.amount.value).replace(/[$,\s]/g, ''));
+        var rec = Object.assign({}, isNew ? { id: pid(), addedAt: Date.now() } : p, {
+          name: name, phone: phone ? P.formatPhone(phone) : '', dozen: dozenVal() === '' ? 1 : dozenVal(), flavor: E.flavor.value.trim(), note: E.note.value.trim(),
+          paid: paid, method: paid ? ((f.querySelector('input[name=method]:checked') || {}).value || '') : '', amount: paid && !isNaN(amt) ? amt : '',
+          pickedUp: E.pickedUp.checked
+        });
+        if (paid && !p.paid) rec.paidAt = Date.now();
+        if (rec.pickedUp && !p.pickedUp) rec.pickedUpAt = Date.now();
+        o.people = o.people || [];
+        if (isNew) o.people.push(rec); else o.people = o.people.map(function (x) { return x.id === rec.id ? rec : x; });
+        bulkChanged(o, isNew ? (rec.name || 'Person') + ' added ✓' : 'Saved ✓');
+        if (another) personSheet(o, null, (rec.name || 'Person') + ' added ✓ (' + o.people.length + ' people)'); else closeSheet();
+        if (another) setTimeout(function () { var n = $('#pp_name'); if (n) n.focus(); }, 50);
+      }
+    });
+  }
+  function paySheet(o, p) {
+    var m = PR.personMoney(o, p);
+    var html = sheetHead('💵 ' + esc(p.name || 'Payment')) +
+      '<p class="pay-owes">' + (m.owed === null ? 'No price set for this order.' : 'Owes <b>' + money(m.owed) + '</b> for ' + esc(PR.dz(p.dozen))) + (p.paid ? '<br><span class="muted">Paid ' + money(m.collected) + (p.method ? ' by ' + esc(p.method) : '') + '</span>' : '') + '</p>' +
+      '<p class="field-label">' + (p.paid ? 'Change how they paid' : 'How did they pay?') + '</p>' +
+      '<div class="method-grid">' + PR.PAY_METHODS.map(function (mth) { return '<button type="button" class="' + (p.paid && p.method === mth ? 'on' : '') + '" data-pay-method="' + mth + '">' + ({ Cash: '💵', Venmo: '🔵', 'Cash App': '🟩', Zelle: '🟣', Check: '🧾', Other: '💳' })[mth] + ' ' + mth + '</button>'; }).join('') + '</div>' +
+      '<div class="field"><label for="pay_amt">Amount <span class="muted">(only if different)</span></label><div class="input-wrap"><input id="pay_amt" type="text" inputmode="decimal" placeholder="' + (m.owed === null ? '' : money(m.owed)) + '" value="' + esc(p.paid && p.amount !== '' && p.amount != null ? p.amount : '') + '"></div></div>' +
+      (p.paid ? '<button class="btn danger block" data-pay-undo>Mark as not paid</button>' : '');
+    openSheet(html, function (sh) {
+      sh.onclick = function (e) {
+        var b;
+        if ((b = e.target.closest('[data-pay-method]'))) {
+          var amt = parseFloat(String($('#pay_amt').value).replace(/[$,\s]/g, ''));
+          if (!p.paid) p.paidAt = Date.now();
+          p.paid = true; p.method = b.dataset.payMethod; p.amount = isNaN(amt) ? '' : amt;
+          closeSheet(); bulkChanged(o, (p.name || 'Person') + ' paid ✓ (' + p.method + ')');
+        } else if (e.target.closest('[data-pay-undo]')) { p.paid = false; p.method = ''; p.amount = ''; delete p.paidAt; closeSheet(); bulkChanged(o, (p.name || 'Person') + ' marked not paid'); }
+      };
+    });
+  }
+  function pasteSheet(o) {
+    var html = sheetHead('📋 Paste a list') +
+      '<p class="small muted">One person per line, like <i>Jane Doe 555-123-4567 2 dozen paid venmo</i>. Copy a list from Notes, Messages or a spreadsheet and paste it here. To dictate, tap 🎤 and say “next person” between people.</p>' +
+      '<div class="input-wrap"><textarea id="pasteBox" rows="7" data-kind="textarea" placeholder="Jane Doe 555-123-4567 2 dozen paid&#10;Bob Smith 1 ½ dozen pumpkin&#10;Amy Lee half dozen owes"></textarea>' + micBtn('pasteBox', 'the list') + '</div>' +
+      (CONTACTS_OK ? '<button type="button" class="btn secondary block" data-contact-many>📇 Pick people from Contacts</button>' : '') +
+      '<div id="pastePreview" class="paste-preview"></div><button class="btn block big" id="pasteAdd" disabled>Add people</button>';
+    openSheet(html, function (sh) {
+      var parsed = [];
+      function key(p) { return p.phone ? p.phone.replace(/\D/g, '') : String(p.name || '').trim().toLowerCase(); }
+      function preview() {
+        var have = {}; (o.people || []).forEach(function (p) { have[key(p)] = 1; if (p.name) have[String(p.name).trim().toLowerCase()] = 1; });
+        parsed = P.parseBulkList($('#pasteBox').value, { flavors: flavorListFor(o) }).map(function (p) { p.dup = !!(have[key(p)] || (p.name && have[p.name.trim().toLowerCase()])); return p; });
+        var add = parsed.filter(function (p) { return !p.dup; });
+        $('#pastePreview').innerHTML = parsed.length ? '<p class="small"><b>' + add.length + ' to add</b>' + (parsed.length > add.length ? ' · ' + (parsed.length - add.length) + ' already on the list (skipped)' : '') + '</p><ul>' + parsed.map(function (p) {
+          return '<li class="' + (p.dup ? 'dup' : '') + '"><b>' + esc(p.name || p.phone) + '</b> · ' + esc(PR.dz(p.dozen === '' ? 1 : p.dozen)) + (p.flavor ? ' · ' + esc(p.flavor) : '') + (p.paid ? ' · ✓ paid' + (p.method ? ' ' + esc(p.method) : '') + (p.amount !== '' ? ' ' + money(p.amount) : '') : ' · unpaid') +
+            (p.pickedUp ? ' · picked up' : '') + (p.phone && p.name ? ' · ' + esc(p.phone) : '') + (p.note ? ' · <i>' + esc(p.note) + '</i>' : '') +
+            (p.dup ? ' <span class="warn-t">already on list</span>' : p.warnings.length ? ' <span class="warn-t">' + esc(p.warnings.join(', ')) + '</span>' : '') + '</li>';
+        }).join('') + '</ul>' : '';
+        $('#pasteAdd').disabled = !add.length; $('#pasteAdd').textContent = add.length ? 'Add ' + add.length + (add.length === 1 ? ' person' : ' people') : 'Add people';
+      }
+      sh.oninput = preview;
+      sh.onclick = function (e) {
+        var b;
+        if ((b = e.target.closest('[data-mic]'))) { e.preventDefault(); micForField(b, document.getElementById(b.dataset.mic)); return; }
+        if (e.target.closest('[data-contact-many]')) {
+          navigator.contacts.select(['name', 'tel'], { multiple: true }).then(function (list) {
+            var lines = (list || []).map(function (c) { return [(c.name && c.name[0]) || '', (c.tel && c.tel[0]) || '', '1 dozen'].filter(Boolean).join(' '); });
+            var ta = $('#pasteBox'); ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + lines.join('\n'); preview();
+          }).catch(function () {});
+          return;
+        }
+        if (e.target.closest('#pasteAdd')) {
+          var add = parsed.filter(function (p) { return !p.dup; }), now = Date.now();
+          o.people = (o.people || []).concat(add.map(function (p, i) {
+            return { id: pid(), addedAt: now + i, name: p.name, phone: p.phone, dozen: p.dozen === '' ? 1 : p.dozen, flavor: p.flavor, paid: p.paid, method: p.method, amount: p.amount,
+              pickedUp: p.pickedUp, note: p.note, paidAt: p.paid ? now : undefined };
+          }));
+          closeSheet(); bulkChanged(o, add.length + (add.length === 1 ? ' person' : ' people') + ' added ✓');
+        }
+      };
+    });
+  }
+  // Walk through people one at a time, opening Messages with each person's own text (iOS can't send many individual texts at once).
+  function walkSheet(o, kind) {
+    var list = PR.sortedPeople(o, 'name').filter(function (p) { return kind === 'unpaid' ? PR.personMoney(o, p).state !== 'paid' : !p.pickedUp; });
+    var noPhone = list.filter(function (p) { return !p.phone; }), queue = list.filter(function (p) { return p.phone; }), i = 0, sent = 0;
+    var title = kind === 'unpaid' ? '💬 Payment reminders' : '📣 Ready-for-pickup texts';
+    if (o.fulfillment === 'delivery' && kind === 'ready') title = '📣 Delivery texts';
+    function draw() {
+      var html = sheetHead(title);
+      if (i >= queue.length) {
+        html += '<div class="walk-done"><span class="big-emoji">✅</span><h3>' + (queue.length ? 'All done' : 'No one to text') + '</h3><p class="muted">' +
+          (queue.length ? 'Opened ' + sent + ' of ' + queue.length + ' texts.' : kind === 'unpaid' ? 'Everyone with a phone number has paid.' : 'Everyone with a phone number has picked up.') + '</p>' +
+          '<button class="btn block" data-sheet-close>Close</button></div>';
+      } else {
+        var p = queue[i], txt = PR.personText(o, p, Object.assign(textOpts(), { kind: kind }));
+        html += '<p class="walk-count">' + (i + 1) + ' of ' + queue.length + ' · <b>' + esc(p.name || p.phone) + '</b>' + (kind === 'unpaid' ? ' · owes ' + money(PR.personMoney(o, p).outstanding) : '') + '</p>' +
+          '<pre class="sms-preview">' + esc(txt) + '</pre>' +
+          '<a class="btn block big confirm-send" href="' + esc(PR.smsLink(p.phone, txt, IS_IOS)) + '" data-walk-send>💬 Text ' + esc(String(p.name || 'them').split(' ')[0]) + '</a>' +
+          '<div class="two-btn"><button class="btn secondary" data-walk-skip>Skip</button><button class="btn secondary" data-sheet-close>Stop</button></div>' +
+          '<p class="muted small">After you send it, come back here for the next person.</p>';
+      }
+      if (noPhone.length) html += '<p class="muted small">No phone number for: ' + esc(noPhone.map(function (p) { return p.name; }).join(', ')) + '</p>';
+      openSheet(html, function (sh) {
+        sh.onclick = function (e) {
+          if (e.target.closest('[data-walk-send]')) {
+            var p = queue[i]; p[kind === 'unpaid' ? 'remindedAt' : 'readyTextAt'] = Date.now(); o.updatedAt = Date.now(); persist(); sent++;
+            setTimeout(function () { i++; draw(); }, 700);   // let Messages open first, then show the next person
+          } else if (e.target.closest('[data-walk-skip]')) { i++; draw(); }
+        };
+      });
+    }
+    draw();
+  }
+  function shareSheet(o) {
+    var withPhones = false;
+    function txt() { return PR.bulkShareText(o, { phones: withPhones }); }
+    var html = sheetHead('📤 Share the list') +
+      '<div class="field switch-field"><label class="switch"><input type="checkbox" id="shPhones"><span class="sw" aria-hidden="true"></span><span class="sw-text"><b>Include phone numbers</b></span></label></div>' +
+      '<pre class="sms-preview share-preview" id="sharePreview"></pre>' +
+      '<button class="btn block" data-share-text>📤 Share as text</button>' +
+      '<button class="btn secondary block" data-share-csv>📄 Share spreadsheet (CSV)</button>' +
+      '<button class="btn link block" data-share-copy>Copy text</button>';
+    openSheet(html, function (sh) {
+      $('#sharePreview').textContent = txt();
+      sh.onchange = function () { withPhones = $('#shPhones').checked; $('#sharePreview').textContent = txt(); };
+      sh.onclick = function (e) {
+        var t = txt();
+        if (e.target.closest('[data-share-text]')) {
+          if (navigator.share) navigator.share({ title: o.name || 'Bulk order', text: t }).catch(function () {});
+          else copyText(t);
+        } else if (e.target.closest('[data-share-csv]')) {
+          shareOrDownload(slug(o.name || 'bulk-order') + '-' + (o.dueDate || 'list') + '.csv', PR.bulkCSV(o), 'text/csv');
+        } else if (e.target.closest('[data-share-copy]')) copyText(t);
+      };
+    });
+  }
+  function copyText(t) {
+    (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast('Copied ✓'); }, function () { toast('Could not copy – press and hold the text to select it'); });
+  }
+  function moreSheet(o) {
+    var html = sheetHead('⋯ More') +
+      '<button class="btn secondary block" data-bm="allpicked">📦 Mark everyone ' + (o.fulfillment === 'delivery' ? 'delivered' : 'picked up') + '</button>' +
+      '<button class="btn secondary block" data-bm="phones">📋 Copy all phone numbers</button>' +
+      '<button class="btn secondary block" data-bm="again">🔁 Start the next round with the same people</button>' +
+      '<p class="muted small">Next round copies the group, prices and everyone’s name, number and usual dozens into a new order (nobody marked paid or picked up). You pick the new date.</p>';
+    openSheet(html, function (sh) {
+      sh.onclick = function (e) {
+        var b = e.target.closest('[data-bm]'); if (!b) return;
+        if (b.dataset.bm === 'allpicked') {
+          if (!confirm('Mark all ' + (o.people || []).length + ' people as ' + (o.fulfillment === 'delivery' ? 'delivered' : 'picked up') + '?')) return;
+          var now = Date.now(); (o.people || []).forEach(function (p) { if (!p.pickedUp) { p.pickedUp = true; p.pickedUpAt = now; } });
+          closeSheet(); bulkChanged(o, 'Everyone marked ✓');
+        } else if (b.dataset.bm === 'phones') {
+          copyText((o.people || []).filter(function (p) { return p.phone; }).map(function (p) { return p.name + ': ' + p.phone; }).join('\n'));
+        } else if (b.dataset.bm === 'again') {
+          var copy = JSON.parse(JSON.stringify(o)), now = Date.now();
+          ['id', 'createdAt', 'updatedAt', 'dueDate', 'photos', 'transcript', 'confirmSentAt', 'customerConfirmedAt', 'confirmedSig'].forEach(function (k) { delete copy[k]; });
+          copy.status = 'Inquiry';
+          copy.people = (o.people || []).map(function (p, i) { return { id: pid(), addedAt: now + i, name: p.name, phone: p.phone, dozen: p.dozen, flavor: p.flavor, paid: false, method: '', amount: '', pickedUp: false, note: '' }; });
+          closeSheet(); pendingDraft = copy; location.hash = '#/new'; toast('Pick the date for the next round, then Save', 4000);
+        }
+      };
+    });
   }
 
   function productCardHTML(o, row) {
     var t = PR.typeOf(o), msg = (t !== 'creampies' && o.message) ? '<div class="message-plaque">“' + esc(o.message) + '”</div>' : '';
     var rows = row('Occasion', esc(o.occasion));
+    if (PR.isBulk(o)) msg = '';
     if (t === 'cake') {
       rows += row('Size', esc(o.size)) + row('Tiers', esc(o.tiers)) + row('Shape', esc(o.shape)) + row('Servings', esc(o.servings)) +
         row('Flavor', esc(o.flavor)) + row('Filling', esc(o.filling)) + row('Frosting', esc(o.frosting)) + row('Colors / design', esc(o.design).replace(/\n/g, '<br>'));
     } else {
       PR.specRows(o).forEach(function (r) { if (r[0] !== 'Message') rows += row(r[0], esc(r[1]).replace(/\n/g, '<br>')); });
     }
-    return '<div class="card product-card"><h3>' + PR.info(o).detail + '</h3>' + msg + '<dl class="kv">' + rows + '</dl></div>';
+    return '<div class="card product-card"><h3>' + (PR.isBulk(o) ? PR.info(o).emoji + ' Bulk ' + PR.info(o).label.toLowerCase() : PR.info(o).detail) + '</h3>' + msg + '<dl class="kv">' + rows + '</dl></div>';
   }
-  function confirmText(o) { return PR.summaryText(o, { signature: state.settings.signature }); }
+  function confirmText(o) { return PR.summaryText(o, { signature: state.settings.signature, payInfo: state.settings.payInfo }); }
   function confirmCardHTML(o) {
     if (!o.phone) return '';
     var c = confirmState(o), when = function (t) { return new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); };
@@ -433,14 +740,14 @@
   // ---------- form ----------
   function fieldHTML(f, o, voiceKeys) {
     var v = o[f.k] == null ? '' : o[f.k], id = 'f_' + f.k, vf = voiceKeys[f.k] ? ' voice-filled' : '';
-    var t = PR.typeOf(o), label = (f.labels && f.labels[t]) || f.label;
+    var t = PR.typeOf(o), label = labelFor(f.labels, f.label, t, PR.isBulk(o));
     var mic = '<button type="button" class="mic" data-mic="' + id + '" aria-label="Dictate ' + esc(label) + '">🎤</button>';
     var lab = '<label for="' + id + '"' + (f.labels ? ' data-labels="' + esc(JSON.stringify(Object.assign({ _: f.label }, f.labels))) + '"' : '') + '>' + esc(label) + '</label>';
     var lists = f.list ? Object.assign({ _: f.list }, f.lists || {}) : null;
     var listAttr = lists ? ' list="dl_' + f.k + '_' + (f.lists && f.lists[t] ? t : '_') + '"' + (f.lists ? ' data-lists="1"' : '') : '';
     var dl = lists ? Object.keys(lists).map(function (lk) { return '<datalist id="dl_' + f.k + '_' + lk + '">' + lists[lk].map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>'; }).join('') : '';
     var capA = f.cap ? ' autocapitalize="' + f.cap + '"' : '';
-    var wrapAttrs = (f.showIf ? ' data-showif="' + f.showIf + '"' : '') + (f.types ? ' data-types="' + f.types.join(' ') + '"' : '');
+    var wrapAttrs = (f.showIf ? ' data-showif="' + f.showIf + '"' : '') + (f.types ? ' data-types="' + f.types.join(' ') + '"' : '') + (f.bulk ? ' data-bulk="' + f.bulk + '"' : '') + (f.bulkShow ? ' data-bulkshow="1"' : '');
     function wrap(inner) { return '<div class="field"' + wrapAttrs + '>' + lab + '<div class="input-wrap' + vf + '">' + inner + '</div>' + dl + '</div>'; }
     switch (f.type) {
       case 'text': case 'tel': case 'email':
@@ -470,10 +777,15 @@
           return '<label><input type="radio" name="productType" value="' + k + '"' + (t === k ? ' checked' : '') + '><span><b>' + ti.emoji + '</b>' + esc(k === 'creampies' ? 'Oatmeal cream pies' : ti.label) + '</span></label>';
         }).join('') + '</div>';
       case 'balance':
-        return '<div class="balance-box"><span>Balance due</span><span id="balanceVal"></span></div>';
+        return '<div class="balance-box"' + wrapAttrs + '><span>Balance due</span><span id="balanceVal"></span></div>';
+      case 'switch':
+        return '<div class="field switch-field"' + wrapAttrs + '><label class="switch' + vf + '"><input type="checkbox" id="' + id + '" name="' + f.k + '"' + (v ? ' checked' : '') + '><span class="sw" aria-hidden="true"></span>' +
+          '<span class="sw-text"><b>' + esc(f.label) + '</b>' + (f.hint ? '<small>' + esc(f.hint) + '</small>' : '') + '</span></label></div>';
     }
     return '';
   }
+  // label lookup: bulk_<type> → bulk → <type> → default
+  function labelFor(m, def, t, bulk) { m = m || {}; return (bulk && (m['bulk_' + t] || m.bulk)) || m[t] || def; }
 
   function reminderEditor(container, list, onChange) {
     function draw() {
@@ -508,7 +820,7 @@
         (existing.warnings && existing.warnings.length ? '<ul>' + existing.warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' : '') + '</div>';
     }
     FORM.forEach(function (sec) {
-      html += '<div class="form-section"><h3' + (sec.product ? ' id="productTitle"' : '') + '>' + (sec.product ? PR.info(o).section : sec.title) + '</h3>';
+      html += '<div class="form-section"><h3' + (sec.product ? ' id="productTitle"' : '') + '>' + (sec.product ? (PR.isBulk(o) ? PR.info(o).emoji + ' Bulk ' + PR.info(o).label.toLowerCase() : PR.info(o).section) : sec.title) + '</h3>';
       sec.fields.forEach(function (f) {
         html += f.row ? '<div class="two-col">' + f.row.map(function (x) { return fieldHTML(x, o, voiceKeys); }).join('') + '</div>' : fieldHTML(f, o, voiceKeys);
       });
@@ -571,10 +883,12 @@
     var shownType = null;
     // Switching product type relabels fields, swaps suggestion lists and shows/hides type-specific fields.
     // Values typed into hidden fields are kept (switching back restores them) but are ignored for this type.
-    function applyType(t) {
-      shownType = t;
+    function curBulk() { var b = form.elements.bulk; return !!(b && b.checked) && curType() !== 'cake'; }
+    function applyType(t, bulk) {
+      shownType = t + (bulk ? '+bulk' : '');
       $('#productTitle').textContent = PR.TYPES[t].section;
-      $$('label[data-labels]', form).forEach(function (l) { var m = JSON.parse(l.dataset.labels); l.textContent = m[t] || m._; var mb = l.parentNode.querySelector('.mic'); if (mb) mb.setAttribute('aria-label', 'Dictate ' + l.textContent); });
+      if (bulk) $('#productTitle').textContent = PR.TYPES[t].emoji + ' Bulk ' + PR.TYPES[t].label.toLowerCase();
+      $$('label[data-labels]', form).forEach(function (l) { var m = JSON.parse(l.dataset.labels); l.textContent = labelFor(m, m._, t, bulk); var mb = l.parentNode.querySelector('.mic'); if (mb) mb.setAttribute('aria-label', 'Dictate ' + l.textContent); });
       $$('input[data-lists]', form).forEach(function (inp) { var id = 'dl_' + inp.name + '_' + t; inp.setAttribute('list', document.getElementById(id) ? id : 'dl_' + inp.name + '__'); });
       var sel = form.elements.itemSize;
       if (sel) {
@@ -586,10 +900,12 @@
     function refresh() {
       var fd = form.elements, pr = parseFloat(fd.price.value), dp = parseFloat(fd.deposit.value);
       $('#balanceVal').textContent = fd.status.value === 'Paid' ? 'Paid in full ✓' : (isNaN(pr) ? '—' : money(Math.max(pr - (isNaN(dp) ? 0 : dp), 0)));
-      var ful = (form.querySelector('input[name=fulfillment]:checked') || {}).value, t = curType();
-      if (t !== shownType) applyType(t);
-      $$('[data-showif],[data-types]', form).forEach(function (el) {
-        el.hidden = (el.dataset.showif && el.dataset.showif !== ful) || (el.dataset.types && el.dataset.types.split(' ').indexOf(t) === -1);
+      var ful = (form.querySelector('input[name=fulfillment]:checked') || {}).value, t = curType(), bulk = curBulk();
+      if (t + (bulk ? '+bulk' : '') !== shownType) applyType(t, bulk);
+      $$('[data-showif],[data-types],[data-bulk]', form).forEach(function (el) {
+        var d = el.dataset;
+        el.hidden = (d.showif && d.showif !== ful && !(d.bulkshow && bulk)) || (d.types && d.types.split(' ').indexOf(t) === -1) ||
+          (d.bulk === 'only' && !bulk) || (d.bulk === 'hide' && bulk);
       });
     }
     form.oninput = form.onchange = refresh;
@@ -623,6 +939,8 @@
         productType: curType(), qty: num(fd.qty.value), qtyUnit: (form.querySelector('input[name=qtyUnit]:checked') || { value: 'dozen' }).value,
         itemSize: fd.itemSize.value, liners: fd.liners.value.trim(), wrapped: (form.querySelector('input[name=wrapped]:checked') || { value: '' }).value,
         packaging: fd.packaging.value.trim(),
+        bulk: curBulk(), organizer: fd.organizer.value.trim(), pricePerDozen: num(fd.pricePerDozen.value), pricePerHalf: num(fd.pricePerHalf.value),
+        people: (existing && existing.people) || o.people || [],
         reminders: o.reminders.filter(function (r) { return r.time; })
       });
       delete rec._newOn; delete rec.warnings;
@@ -736,13 +1054,14 @@
       return {
         fireAt: t.toISOString(),
         title: reminderTitle(o, n),
-        body: 'Due ' + fmtDate(o.dueDate) + (o.dueTime ? ' at ' + fmtTime(o.dueTime) : '')
+        body: 'Due ' + fmtDate(o.dueDate) + (o.dueTime ? ' at ' + fmtTime(o.dueTime) : '') + (PR.isBulk(o) ? ' · ' + PR.bulkTotals(o).people + ' people' : '')
       };
     }).filter(Boolean).slice(0, 20);
   }
   // "🧁 Tomorrow: 2 dozen cupcakes for Jane Doe – Baby shower", "🎂 Today: Birthday cake for Sarah Johnson"
   function reminderTitle(o, n) {
     var cake = PR.typeOf(o) === 'cake';
+    if (PR.isBulk(o)) return PR.info(o).emoji + ' ' + (n <= 0 ? 'Today: ' : n === 1 ? 'Tomorrow: ' : 'In ' + n + ' days: ') + PR.bulkTitle(o);
     return PR.info(o).emoji + ' ' + (n <= 0 ? 'Today: ' : n === 1 ? 'Tomorrow: ' : 'In ' + n + ' days: ') + PR.productPhrase(o) + ' for ' + (o.name || 'customer') +
       (!cake && o.occasion ? ' – ' + o.occasion : '');
   }
@@ -773,6 +1092,7 @@
   function renderSettings() {
     renderNotifCard();
     $('#signatureInput').value = state.settings.signature || '';
+    $('#payInfoInput').value = state.settings.payInfo || '';
     var ed = reminderEditor($('#defaultReminders'), state.settings.defaultReminders, persistSettings);
     $('#addDefaultReminder').onclick = function () { ed.add(); };
     var n = state.orders.length, base = n + ' order' + (n === 1 ? '' : 's') + ' saved on this device.';
@@ -838,7 +1158,7 @@
     var t0 = Date.now();
     if (ids.length) toast('Preparing backup with ' + ids.length + ' photo' + (ids.length === 1 ? '' : 's') + '…', 8000);
     PH.exportPhotos(ids).then(function (photos) {
-      var data = { app: 'cake-book', version: 2, exportedAt: new Date().toISOString(), orders: state.orders, photos: photos, settings: { defaultReminders: state.settings.defaultReminders, signature: state.settings.signature || '' } };
+      var data = { app: 'cake-book', version: 2, exportedAt: new Date().toISOString(), orders: state.orders, photos: photos, settings: { defaultReminders: state.settings.defaultReminders, signature: state.settings.signature || '', payInfo: state.settings.payInfo || '' } };
       var b = { name: 'cake-book-backup-' + iso(new Date()) + '.json', text: JSON.stringify(data), sig: backupSig() };
       // Safari only allows the share sheet right after a tap; if preparing took a while, ask for one more tap.
       if (IS_IOS && Date.now() - t0 > 700) {
@@ -868,6 +1188,7 @@
         state.orders = Object.keys(map).map(function (k) { return map[k]; });
         if (data.settings && Array.isArray(data.settings.defaultReminders)) state.settings.defaultReminders = data.settings.defaultReminders;
         if (data.settings && typeof data.settings.signature === 'string' && !state.settings.signature) state.settings.signature = data.settings.signature;
+        if (data.settings && typeof data.settings.payInfo === 'string' && !state.settings.payInfo) state.settings.payInfo = data.settings.payInfo;
         return Promise.all([persist(), persistSettings()]);
       }).then(function () { Push.fullSync(); toast('Restored ' + list.length + ' order' + (list.length === 1 ? '' : 's') + (photos.length ? ' and ' + photos.length + ' photos' : '') + ' ✓', 4000); route(); })
         .catch(function () { toast('Restore failed – the phone may be out of storage space.', 6000); });
@@ -933,6 +1254,28 @@
         renderCalendar(); return;
       }
       if ((el = t.closest('[data-filter]'))) { orderFilter = el.dataset.filter; renderOrders(); return; }
+      if ((el = t.closest('[data-sheet-close]'))) { e.preventDefault(); closeSheet(); return; }
+      if ((el = t.closest('[data-new-bulk]'))) { pendingDraft = { productType: 'creampies', bulk: true }; location.hash = '#/new'; return; }
+      var bo = location.hash.indexOf('#/order/') === 0 ? getOrder(location.hash.split('/')[2]) : null;
+      if (bo && PR.isBulk(bo)) {
+        if ((el = t.closest('[data-person-add]'))) { personSheet(bo, null); return; }
+        if ((el = t.closest('[data-paste-open]'))) { pasteSheet(bo); return; }
+        if ((el = t.closest('[data-person-edit]'))) { var pe = getPerson(bo, el.dataset.personEdit); if (pe) personSheet(bo, pe); return; }
+        if ((el = t.closest('[data-person-pay]'))) { var pp = getPerson(bo, el.dataset.personPay); if (pp) paySheet(bo, pp); return; }
+        if ((el = t.closest('[data-person-pick]'))) {
+          var pk = getPerson(bo, el.dataset.personPick); if (!pk) return;
+          pk.pickedUp = !pk.pickedUp; if (pk.pickedUp) pk.pickedUpAt = Date.now(); else delete pk.pickedUpAt;
+          var left = (bo.people || []).filter(function (x) { return !x.pickedUp; }).length;
+          bulkChanged(bo, pk.pickedUp ? (pk.name || 'Person') + ' picked up ✓' + (left ? '' : ' – that’s everyone 🎉') : (pk.name || 'Person') + ' not picked up');
+          return;
+        }
+        if ((el = t.closest('[data-person-text]'))) { var ptx = getPerson(bo, el.dataset.personText); if (ptx) { ptx.textedAt = Date.now(); bo.updatedAt = Date.now(); persist(); } return; }
+        if ((el = t.closest('[data-walk]'))) { walkSheet(bo, el.dataset.walk); return; }
+        if ((el = t.closest('[data-share-list]'))) { shareSheet(bo); return; }
+        if ((el = t.closest('[data-bulk-more]'))) { moreSheet(bo); return; }
+        if ((el = t.closest('[data-pfilter]'))) { peopleView.filter = el.dataset.pfilter; renderPeople(bo); return; }
+        if ((el = t.closest('[data-psort]'))) { peopleView.sort = peopleView.sort === 'name' ? 'added' : 'name'; renderPeople(bo); return; }
+      }
       if ((el = t.closest('[data-typefilter]'))) { typeFilter = el.dataset.typefilter; try { sessionStorage.setItem('typeFilter', typeFilter); } catch (x) {} renderUpcoming(); return; }
       if ((el = t.closest('[data-confirm-send]'))) {
         // the link itself opens Messages with the summary filled in; we just note when it was sent
@@ -972,6 +1315,9 @@
         }
       }
     });
+    document.addEventListener('input', function (e) {
+      if (e.target.id === 'peopleSearch') { var so = getOrder(location.hash.split('/')[2]); if (so) { peopleView.q = e.target.value; renderPeople(so); } }
+    });
     document.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.matches('.order-card')) e.target.click(); });
     $('#showDone').onchange = renderUpcoming;
     $('#calPrev').onclick = function () { calState.month = new Date(calState.month.getFullYear(), calState.month.getMonth() - 1, 1); renderCalendar(); };
@@ -993,6 +1339,7 @@
     $('#exportIcsUpcoming').onclick = function () { var today = iso(new Date()); exportICS(state.orders.filter(function (o) { return o.dueDate >= today && !isClosed(o); }), 'cake-orders-upcoming.ics'); };
     $('#exportIcsAll').onclick = function () { exportICS(state.orders.filter(function (o) { return o.dueDate; }), 'cake-orders-all.ics'); };
     $('#exportJson').onclick = exportJSON;
+    $('#payInfoInput').onchange = function (e) { state.settings.payInfo = e.target.value.trim(); persistSettings(); toast(state.settings.payInfo ? 'Saved – texts will say “You can pay with ' + state.settings.payInfo + '”' : 'Payment info removed'); };
     $('#signatureInput').onchange = function (e) { state.settings.signature = e.target.value.trim(); persistSettings(); toast(state.settings.signature ? 'Texts will say “This is ' + state.settings.signature + '”' : 'Texts won’t include a name'); };
     $('#importJson').onchange = function (e) { if (e.target.files[0]) importJSON(e.target.files[0]); e.target.value = ''; };
     $('#wipeAll').onclick = function () {
@@ -1060,5 +1407,5 @@
     });
     navigator.serviceWorker.addEventListener('message', function (e) { if (e.data && e.data.url) location.hash = e.data.url; });
   }
-  window.CakeApp = { products: PR, confirmText: confirmText, store: Store, photos: PH, push: Push, pushRemindersFor: pushRemindersFor, state: state, persist: persist, route: route, buildICS: function () { return ICS.buildICS(state.orders); } };
+  window.CakeApp = { closeSheet: closeSheet, products: PR, confirmText: confirmText, store: Store, photos: PH, push: Push, pushRemindersFor: pushRemindersFor, state: state, persist: persist, route: route, buildICS: function () { return ICS.buildICS(state.orders); } };
 })();

@@ -63,7 +63,7 @@
     'please ok okay so um uh hi hey hello customer name called about calling from party ' +
     'today tomorrow tonight morning afternoon evening noon ' +
     'january february march april may june july august september october november december ' +
-    'sunday monday tuesday wednesday thursday friday saturday cupcakes cupcake sheet dozen oatmeal cream creme pie pies cookies mini ' +
+    'sunday monday tuesday wednesday thursday friday saturday cupcakes cupcake sheet dozen oatmeal cream creme pie pies cookies mini bulk group ' +
     'chocolate vanilla red velvet lemon strawberry funfetti buttercream frosting fondant filling says message').split(/\s+/));
   OCCASIONS.forEach(function (o) { o[0].split(' ').forEach(function (w) { NAME_STOP.add(w); }); });
 
@@ -282,12 +282,104 @@
     return 'Regular';
   }
 
+  // ---------- bulk orders: one person per line ----------
+  // "Jane Doe 555-123-4567 2 dozen paid", "Bob Smith, 1.5 dz, pumpkin, venmo", "Amy – half dozen – owes", "1. Tom x3 picked up",
+  // or our own CSV export (header row with Name / Dozen / Paid …).
+  var BULK_FLAVORS = ['brown sugar', 'peanut butter', 'red velvet', 'pumpkin spice', 'cookies and cream', 'cookies & cream', 'salted caramel', 'oatmeal raisin',
+    'classic', 'original', 'regular', 'maple', 'pumpkin', 'chocolate', 'vanilla', 'gingerbread', 'cinnamon', 'raisin', 'snickerdoodle', 'lemon', 'strawberry',
+    'funfetti', 'caramel', 'coconut', 'mint', 'espresso', 'mocha', 'apple', 'cherry', 'carrot', 'banana', 'birthday cake'];
+  var METHODS = [[/\bcash\s?app\b|\$cashtag/i, 'Cash App'], [/\bvenmo(?:ed)?\b/i, 'Venmo'], [/\bzelle(?:d)?\b/i, 'Zelle'], [/\bcheck\b|\bcheque\b/i, 'Check'], [/\bcash\b/i, 'Cash'], [/\bpay\s?pal\b|\bcard\b|\bapple\s?pay\b/i, 'Other']];
+  function dozenFrom(t) {
+    var m;
+    if ((m = /\b(\d+)\s*(?:and\s+a\s+half|½|\s1\/2)\s*(?:dozen|doz|dzn|dz)?\b/i.exec(t)) && /½|half|1\/2/.test(m[0])) return { v: +m[1] + 0.5, m: m };
+    if ((m = /(?:^|\s)½\s*(?:dozen|doz|dzn|dz)?\b|\bhalf\s+(?:a\s+)?(?:dozen|doz|dzn|dz)\b|\b1\/2\s*(?:dozen|doz|dzn|dz)\b/i.exec(t))) return { v: 0.5, m: m };
+    if ((m = /\b(\d+(?:\.\d+)?)\s*(?:dozen|doz|dzn|dz)\.?(?![a-z])/i.exec(t))) return { v: +m[1], m: m };
+    if ((m = /\b(?:a\s+)?dozen\b/i.exec(t))) return { v: 1, m: m };
+    if ((m = /(?:^|\s)[x×]\s?(\d+(?:\.\d+)?)\b/i.exec(t))) return { v: +m[1], m: m };
+    if ((m = /(?:^|[\s,|;\t])(\d{1,3}(?:\.5)?)(?=$|[\s,|;\t])/.exec(t))) return { v: +m[1], m: m };
+    return null;
+  }
+  function parseBulkLine(line, opts) {
+    opts = opts || {};
+    var raw = String(line || '').trim();
+    var r = { name: '', phone: '', dozen: '', flavor: '', paid: false, method: '', amount: '', pickedUp: false, note: '', raw: raw, warnings: [] };
+    if (!raw) return null;
+    var t = ' ' + raw.replace(/^\s*(?:\d{1,3}[.)]\s+|[-•*–]\s+)/, '') + ' ';
+    t = normalizeText(t).replace(/\bpaid\s+in\s+full\b/i, 'paid');
+    var m;
+    function cut(x) { t = t.replace(x, ' | '); }
+    if ((m = /\S+@\S+\.\w+/.exec(t))) cut(m[0]);
+    if ((m = /(?:\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/.exec(t)) || (m = /\b\d{3}[\s.-]\d{4}\b/.exec(t))) { r.phone = formatPhone(m[0]); cut(m[0]); }
+    if ((m = /\$\s?(\d+(?:\.\d{1,2})?)|\b(\d+(?:\.\d{1,2})?)\s*(?:dollars?|bucks)\b/i.exec(t))) { r.amount = parseFloat(m[1] || m[2]); cut(m[0]); }
+    if ((m = /\b(?:picked\s?up|pickedup|got (?:it|them)|delivered|collected)\b/i.exec(t))) { r.pickedUp = true; cut(m[0]); }
+    var unpaid = /\b(?:unpaid|not\s+paid|hasn'?t\s+paid|has\s+not\s+paid|needs?\s+to\s+pay|owes?|owing|due)\b/i.exec(t);
+    if (unpaid) cut(unpaid[0]);
+    for (var i = 0; i < METHODS.length; i++) { if ((m = METHODS[i][0].exec(t))) { r.method = METHODS[i][1]; cut(m[0]); break; } }
+    if ((m = /\b(?:paid|pd|prepaid)\b|✓|✔/i.exec(t))) { r.paid = true; cut(m[0]); }
+    if (r.method && !unpaid) r.paid = true;
+    if (unpaid) { r.paid = false; if (r.method) r.note = 'will pay ' + r.method; r.method = ''; r.amount = ''; }
+    if (!r.paid) r.amount = '';
+    var d = dozenFrom(t);
+    if (d) { r.dozen = d.v; t = t.slice(0, d.m.index) + ' | ' + t.slice(d.m.index + d.m[0].length); }
+    var fl = (opts.flavors || []).concat(BULK_FLAVORS).sort(function (a, b) { return b.length - a.length; });
+    for (var k = 0; k < fl.length; k++) {
+      var fm = new RegExp('\\b' + escRe(fl[k].toLowerCase()) + '\\b', 'i').exec(t);
+      if (fm) { r.flavor = /^(classic|original|regular)$/i.test(fl[k]) ? '' : cap(fl[k].toLowerCase()); cut(fm[0]); if (/^(classic|original|regular)$/i.test(fl[k])) r.classic = true; break; }
+    }
+    t = t.replace(/\b(?:each|cream\s+pies?|oatmeal|cupcakes?|cookies?|for|of|and|wants?|ordered|order|flavou?r|filling)\b/gi, ' | ');
+    var segs = t.split(/[|,;\t]|\s[-–—]\s|\s{2,}/).map(function (x) { return clean(x).replace(/^[:\-–—]+|[:\-–—]+$/g, '').trim(); }).filter(function (x) { return /[A-Za-z]/.test(x); });
+    if (segs.length) {
+      var nm = segs.shift().replace(/[^A-Za-z'’.\- ]/g, ' ').replace(/\s+/g, ' ').trim();
+      r.name = nm === nm.toLowerCase() || nm === nm.toUpperCase() ? titleCase(nm) : nm;
+      var rest = segs.join(', ');
+      if (rest) r.note = (r.note ? r.note + '; ' : '') + rest;
+    }
+    if (!r.name) r.warnings.push('no name');
+    if (r.dozen === '') r.warnings.push('no amount – counted as 1 dozen');
+    return r;
+  }
+  function csvSplit(line, sep) {
+    var out = [], cur = '', q = false;
+    for (var i = 0; i < line.length; i++) {
+      var c = line[i];
+      if (q) { if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+      else if (c === '"') q = true; else if (c === sep) { out.push(cur); cur = ''; } else cur += c;
+    }
+    out.push(cur);
+    return out.map(function (x) { return x.trim().replace(/^'(?=[=+\-@])/, ''); });
+  }
+  /** Many lines → people. Lines can also be separated by ";" or "next person" (handy when dictating). */
+  function parseBulkList(text, opts) {
+    var lines = String(text || '').split(/\r?\n|;|\bnext person\b/i).map(function (x) { return x.trim(); }).filter(Boolean);
+    if (!lines.length) return [];
+    var sep = lines[0].indexOf('\t') >= 0 ? '\t' : ',';
+    var head = csvSplit(lines[0].toLowerCase(), sep);
+    var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
+    if (col(/^name$|customer|person/) >= 0 && (col(/dozen|qty|quantity|how many/) >= 0 || col(/paid/) >= 0)) {
+      var C = { name: col(/^name$|customer|person/), phone: col(/phone|cell|number/), dozen: col(/dozen|qty|quantity|how many/), flavor: col(/flavou?r/),
+        paid: col(/^paid\??$|paid\?|^status$/), method: col(/method|how paid/), amount: col(/amount paid|^paid amount|^amount$/), picked: col(/picked|pick ?up|delivered/), note: col(/note/) };
+      return lines.slice(1).map(function (ln) {
+        var c = csvSplit(ln, sep), g = function (k) { return C[k] >= 0 ? (c[C[k]] || '').trim() : ''; };
+        if (!g('name') && !g('phone')) return null;
+        var paidV = g('paid').toLowerCase(), p = {
+          name: g('name'), phone: g('phone') ? formatPhone(g('phone')) : '', dozen: g('dozen') !== '' && !isNaN(parseFloat(g('dozen'))) ? parseFloat(g('dozen')) : '',
+          flavor: g('flavor'), paid: /^(yes|y|paid|true|1|x|✓|partial)$/.test(paidV), method: g('method'), amount: '', pickedUp: /^(yes|y|true|1|x|✓)$/i.test(g('picked')),
+          note: g('note'), raw: ln, warnings: [] };
+        if (p.paid && g('amount') !== '' && !isNaN(parseFloat(g('amount').replace(/[$,]/g, '')))) p.amount = parseFloat(g('amount').replace(/[$,]/g, ''));
+        if (paidV === 'yes' || paidV === 'paid') p.amount = p.amount === '' ? '' : p.amount;
+        if (p.dozen === '') p.warnings.push('no amount – counted as 1 dozen');
+        return p;
+      }).filter(Boolean);
+    }
+    return lines.filter(function (ln) { return !/^names?\b.*\b(?:phone|dozen|paid|qty)\b/i.test(ln); }).map(function (ln) { return parseBulkLine(ln, opts); }).filter(function (p) { return p && (p.name || p.phone); });
+  }
+
   // ---------- main parser ----------
   function parseOrder(text, now) {
     now = now || new Date();
     var r = { name: '', phone: '', email: '', fulfillment: '', address: '', customerNotes: '', occasion: '', dueDate: '', dueTime: '',
       size: '', servings: '', tiers: '', shape: '', flavor: '', filling: '', frosting: '', design: '', message: '', allergies: '',
-      price: '', deposit: '', productType: '', qty: '', qtyUnit: '', itemSize: '', liners: '', wrapped: '', packaging: '', warnings: [] };
+      price: '', deposit: '', bulk: false, pricePerDozen: '', productType: '', qty: '', qtyUnit: '', itemSize: '', liners: '', wrapped: '', packaging: '', warnings: [] };
     var w = normalizeText(text);
     var m;
     function cut(str) { w = w.replace(str, ' | '); }
@@ -313,6 +405,8 @@
     }
     w = w.replace(/\b(?:(?:her|his|their|the)\s+)?(?:phone|cell|mobile)(?:\s+number)?(?:\s+is)?\b|\bnumber is\b/gi, ' | ');
 
+    // "$12 a dozen" is a price, not a quantity
+    w = w.replace(/(\$\s?\d+(?:\.\d{1,2})?|\b\d+(?:\.\d{1,2})?\s*(?:dollars?|bucks))\s+(?:a|per|each|for\s+a|for\s+each)\s+dozen\b/gi, '$1 perdz');
     // product type: cupcakes / oatmeal cream pies (cakes are the default)
     w = w.replace(/\bcup\s+cakes\b/gi, 'cupcakes').replace(/\bcup\s+cake\b/gi, 'cupcake');
     var cpM = CREAMPIE_RE.exec(w), cuM = CUPCAKE_RE.exec(w);
@@ -393,11 +487,13 @@
       else x.kind = 'price';
     });
     amounts.forEach(function (x) {
+      if (/^\s*(?:dollars?\s+)?perdz\b/i.test(w.slice(x.e, x.e + 25))) { x.kind = 'perdozen'; if (r.pricePerDozen === '') r.pricePerDozen = x.v; }
       if (x.kind === 'deposit' && r.deposit === '') r.deposit = x.v;
       else if (x.kind === 'price' && r.price === '') r.price = x.v;
       else if (x.kind === 'balance' && balance === null) balance = x.v;
     });
     if (r.price === '' && balance !== null) r.price = balance + (r.deposit || 0);
+    w = w.replace(/\bperdz\b/gi, ' | ');
     for (var ai = amounts.length - 1; ai >= 0; ai--) cutSpan(amounts[ai].i, amounts[ai].e);
     w = w.replace(/\b(?:non-?refundable\s+)?(?:deposit|down payment|retainer)(?:\s+(?:of|is|was))?\b|\b(?:price|total|cost|costs|charging)(?:\s+(?:is|of|will be))?\b|\bpaid\b(?:\s+(?:a|an))?|\bbalance(?:\s+due)?\b/gi, ' | ');
 
@@ -612,6 +708,9 @@
     var noteRe = /\b(?:notes?(?:\s+that)?|also note|special request(?:s)?)\s*[:,]?\s+(.+?)(?=[.;|]|$)/i;
     if ((m = noteRe.exec(w))) r.customerNotes = cap(clean(m[1]));
 
+    if ((r.productType === 'cupcakes' || r.productType === 'creampies') && /\b(?:bulk|group\s+order|fundraiser|everyone'?s\s+orders?|sign[- ]?up\s+(?:sheet|list))\b/i.test(text)) {
+      r.bulk = true; r.qty = ''; r.warnings.push('Bulk order – add each person on the order page after saving.');
+    } else if (r.pricePerDozen !== '' && r.price === '' && r.qty !== '' && r.qtyUnit === 'dozen') r.price = Math.round(r.qty * r.pricePerDozen * 100) / 100;
     if (!r.dueDate) r.warnings.push('No date found – please pick the due date.');
     if (!r.name) r.warnings.push('No customer name found.');
     r._rest = clean(w.replace(/\|/g, ' '));
@@ -619,6 +718,6 @@
   }
 
   var api = { parseOrder: parseOrder, parseDateTime: parseDateTime, wordsToNumbers: wordsToNumbers, normalizeText: normalizeText,
-    normalizeSpokenEmail: normalizeSpokenEmail, formatPhone: formatPhone, extractNumber: extractNumber, isoDate: isoDate, parseQuantity: parseQuantity };
+    normalizeSpokenEmail: normalizeSpokenEmail, formatPhone: formatPhone, extractNumber: extractNumber, isoDate: isoDate, parseQuantity: parseQuantity, parseBulkLine: parseBulkLine, parseBulkList: parseBulkList };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CakeParser = api;
 })(this);

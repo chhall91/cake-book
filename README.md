@@ -49,3 +49,26 @@ Real push reminders come from the **cake-push** Cloudflare Worker (`/workspace/c
   app re-syncs all reminders once so the server copies get the new titles.
 - Tests: `node tests/products.test.js`, `node tests/v6-e2e.js` (needs the :8765 server; saves screenshots 6–9),
   `node tests/upgrade-v6-test.js` (live v5 deploy → v6, own server on :8769).
+
+## Bulk / group orders – v7
+- Cupcake and cream pie orders have a **👥 Bulk / group order** switch (also a "👥 Bulk order" button on Upcoming, and voice:
+  "bulk order … fundraiser … $12 a dozen"). Stored on the order: `bulk: true`, `organizer`, `pricePerDozen`, optional `pricePerHalf`
+  (½ dozen price; with only a half price a dozen = 2×), `people: [{ id, name, phone, dozen (0.5 steps), flavor (blank = order default),
+  paid, method (Cash/Venmo/Cash App/Zelle/Check/Other), amount (amount actually paid, only if different → "part paid"), pickedUp,
+  note, addedAt, paidAt, pickedUpAt, textedAt, remindedAt, readyTextAt }]`. `name` = group/fundraiser name, `phone` = organizer phone.
+  Turning the switch off keeps `people` stored (just hidden). Old orders are untouched (no migration needed).
+- Order detail › **People & payments**: totals (people, dozen + cookies/cupcakes, picked up, collected of owed, outstanding / # unpaid),
+  "To bake" per-flavor dozens, Add person sheet (mic on every field, ±½ stepper, ½/1/2/3/4/6 quick buttons, paid + method,
+  Add & next person), **Paste a list** (one person per line, "next person" when dictating, CSV with header; live preview; people already
+  on the list are skipped by phone/name), tap a row's 💵 to record payment, 📦 to toggle picked up, 💬 to text that person.
+  Filters All / Unpaid / Not picked up, A–Z ↔ added order, search when > 8 people.
+- **Remind unpaid** / **Ready texts** walk through people one at a time (each gets their own text with their own amount; no group
+  text, so nobody sees everyone's numbers and there are no reply-all threads). **Share list**: plain text (phones optional) or CSV
+  through the share sheet. **More**: mark everyone picked up, copy all phone numbers, start the next round with the same people.
+- Optional "How people can pay" (More › Confirmation texts, `settings.payInfo`, in backups) adds "You can pay with …" to texts.
+- Contacts picker (📇) only appears where `navigator.contacts.select` exists (Android Chrome; iOS Safari only with the
+  experimental Contact Picker flag on), otherwise it's hidden.
+- Cards: "Bulk · 23 people · 48 dozen · $96 unpaid"; reminders/calendar: "🍪 Tomorrow: 48 dozen cream pies – Smith fundraiser"
+  (only totals go to the push server – never the people's names or numbers; the .ics description holds the full list on the phone).
+- Tests: `node tests/bulk-parser.test.js`, `node tests/products.test.js`, `node tests/v7-bulk-e2e.js` (needs the :8765 server;
+  screenshots 10a–10g), `node tests/upgrade-v7-test.js` (v6 snapshot in /tmp/live-v6 → v7, own server on :8770).

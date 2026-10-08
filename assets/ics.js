@@ -43,6 +43,18 @@
   function money(n) { return n === '' || n == null || isNaN(n) ? '' : '$' + Number(n).toFixed(2).replace(/\.00$/, ''); }
 
   function describe(o) {
+    if (PR.isBulk(o)) {
+      var bt = PR.bulkTotals(o);
+      return [o.organizer || o.phone ? 'Organizer: ' + [o.organizer, o.phone].filter(Boolean).join(' · ') : '',
+        (o.fulfillment === 'delivery' ? 'DELIVERY' : 'Pickup') + (o.address ? ' at ' + o.address : ''),
+        'Bulk: ' + bt.people + ' people · ' + bt.dozen + ' dozen (' + bt.cookies + ')',
+        bt.flavors.length ? 'To bake: ' + bt.flavors.map(function (f) { return f.flavor + ' ' + f.dozen + ' dz'; }).join(', ') : '',
+        o.filling && 'Filling: ' + o.filling, o.allergies && '⚠ Allergies: ' + o.allergies,
+        bt.owed ? 'Collected ' + money(bt.collected) + ' of ' + money(bt.owed) + ' · ' + bt.unpaid + ' unpaid' : bt.unpaid + ' unpaid',
+        o.customerNotes && 'Notes: ' + o.customerNotes, '',
+        PR.sortedPeople(o, 'name').slice(0, 80).map(function (p) { var m = PR.personMoney(o, p); return '• ' + (p.name || p.phone) + ' – ' + PR.dz(p.dozen) + (p.flavor ? ' ' + p.flavor : '') + (m.state === 'paid' ? ' – paid' : ' – UNPAID'); }).join('\n')
+      ].filter(function (x) { return x !== '' && x; }).join('\n');
+    }
     var bal = o.status === 'Paid' ? 0 : Math.max((+o.price || 0) - (+o.deposit || 0), 0);
     var lines = [
       'Customer: ' + (o.name || '') + (o.phone ? ' · ' + o.phone : '') + (o.email ? ' · ' + o.email : ''),
@@ -69,6 +81,7 @@
     }
     // e.g. "🧁 Pickup: 2 dozen cupcakes for Jane Doe – Baby shower", "🎂 Deliver: Wedding cake for Maria Garcia"
     var cake = PR.typeOf(o) === 'cake', what = PR.productPhrase(o) + ' for ' + (o.name || 'customer') + (!cake && o.occasion ? ' – ' + o.occasion : '');
+    if (PR.isBulk(o)) what = PR.bulkTitle(o);
     var title = PR.info(o).emoji + ' ' + (o.fulfillment === 'delivery' ? 'Deliver' : 'Pickup') + ': ' + what;
     L.push('SUMMARY:' + esc(title), 'DESCRIPTION:' + esc(describe(o)));
     if (o.fulfillment === 'delivery' && o.address) L.push('LOCATION:' + esc(o.address));

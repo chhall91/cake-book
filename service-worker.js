@@ -1,5 +1,5 @@
 /* Cake Book service worker: offline app shell, push reminders, and generated .ics files served as real text/calendar URLs (for iOS Calendar). */
-var VERSION = 'cakebook-v6';
+var VERSION = 'cakebook-v7';
 var SHELL = ['./', 'index.html', 'assets/styles.css', 'assets/app.js', 'assets/parser.js', 'assets/products.js', 'assets/ics.js', 'assets/photos.js', 'assets/push.js', 'assets/config.js', 'manifest.json',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 var ICS_CACHE = 'cakebook-ics';
