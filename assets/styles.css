@@ -258,3 +258,35 @@ html.viewer-open, html.viewer-open body { overflow: hidden; }
 #pushBtns:empty, #pushBtns:not(:has(> :not([hidden]))) { display: none; }
 .push-steps { margin: 6px 0 4px 1.2em; padding: 0; }
 .push-steps li { margin: 2px 0; }
+
+/* v6: product types (cake / cupcakes / oatmeal cream pies) + customer confirmation texts */
+.type-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.type-picker label { display: block; }
+.type-picker input { position: absolute; opacity: 0; pointer-events: none; }
+.type-picker span { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 84px; padding: 8px 4px; text-align: center;
+  border: 2px solid var(--line); border-radius: 16px; background: var(--paper); font-weight: 700; font-size: 14.5px; line-height: 1.2; cursor: pointer; }
+.type-picker span b { font-size: 30px; line-height: 1; }
+.type-picker input:checked + span { border-color: var(--rose); background: var(--blush); color: var(--rose-dark); box-shadow: 0 0 0 3px rgba(200, 80, 106, .15); }
+.type-picker input:focus-visible + span { outline: 3px solid var(--rose); }
+.type-picker.voice-filled input:checked + span { background: #FFF9DB; border-color: #EBCF79; color: var(--rose-dark); }
+.segmented.seg-small span { min-height: 46px; font-size: 15px; }
+.type-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 12px 0 2px; overflow: visible; }
+.type-chips .chip { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 58px; padding: 5px 2px; border-radius: 16px; font-size: 13.5px; line-height: 1.15; }
+.type-chips .chip .te { font-size: 20px; line-height: 1.1; display: flex; align-items: center; gap: 3px; }
+.type-chips .chip .tl { white-space: nowrap; }
+.chip .chip-n { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 3px; border-radius: 99px; background: rgba(0, 0, 0, .08); font-size: 13px; }
+.chip.on .chip-n { background: rgba(255, 255, 255, .28); }
+.pill.type-pill { background: var(--blush); color: var(--rose-dark); }
+.pill.tp-cupcakes { background: var(--lav); color: #5B3C8C; }
+.pill.tp-creampies { background: var(--butter); color: #7A5310; }
+.pill.ok { background: var(--mint); color: #1E6B3A; }
+.dot.dot-cupcakes { background: #8A63C9; } .dot.dot-creampies { background: #C8902A; }
+.detail-hero .hero-product { font-weight: 700; color: var(--rose-dark); font-size: 17px; margin-bottom: 2px; }
+.text-input { width: 100%; min-height: 48px; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; background: #fff; }
+.confirm-card .confirm-line { margin: 0 0 4px; color: var(--choc-soft); }
+.confirm-card.is-confirmed { border-color: #A9DDBA; background: #F4FBF6; }
+.confirm-card .confirm-send { text-decoration: none; align-items: center; justify-content: center; }
+.btn.ok-btn { background: var(--mint); color: #1E6B3A; border: 2px solid #A9DDBA; box-shadow: none; }
+.msg-preview summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--rose-dark); font-weight: 700; }
+.sms-preview { white-space: pre-wrap; word-wrap: break-word; font: 15.5px/1.38 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 4px 0 6px;
+  background: #E9E9EB; color: #111; padding: 10px 14px; border-radius: 18px; border-bottom-left-radius: 6px; max-width: 92%; }

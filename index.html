@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Cake Book</title>
-  <meta name="description" content="Schedule and track cake orders">
+  <meta name="description" content="Schedule and track cake, cupcake and oatmeal cream pie orders">
   <meta name="theme-color" content="#C8506A">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -27,8 +27,9 @@
   <main id="main">
     <!-- UPCOMING -->
     <section class="view" id="view-upcoming" data-title="Cake Book">
-      <button class="talk-btn" data-go="#/voice"><span class="talk-mic">🎤</span><span><b>Talk to add a cake</b><small>Say the whole order – I'll fill in the form</small></span></button>
+      <button class="talk-btn" data-go="#/voice"><span class="talk-mic">🎤</span><span><b>Talk to add an order</b><small>Cake, cupcakes or cream pies – say it all, I'll fill in the form</small></span></button>
       <button class="btn secondary block" data-go="#/new">＋ Type a new order</button>
+      <div class="chips type-chips" id="typeChips" role="toolbar" aria-label="Show"></div>
       <div id="upcomingList"></div>
       <label class="toggle-row"><input type="checkbox" id="showDone"> Show finished orders</label>
     </section>
@@ -72,10 +73,16 @@
         <button class="btn secondary small-btn" id="addDefaultReminder">＋ Add reminder</button>
       </div>
       <div class="card">
+        <h3>💬 Confirmation texts</h3>
+        <label class="field-label" for="signatureInput">Your name or bakery name (optional)</label>
+        <input type="text" id="signatureInput" class="text-input" placeholder="e.g. Kim’s Cakes" autocapitalize="words" maxlength="60">
+        <p class="muted small">Each order has a <b>Text for confirmation</b> button. It opens Messages with the order details already typed out, starting “Hi Sarah! This is <i>your name</i>.” You just tap send.</p>
+      </div>
+      <div class="card">
         <h3>📅 Calendar</h3>
-        <button class="btn block" id="exportIcsUpcoming">Export upcoming cakes to calendar</button>
+        <button class="btn block" id="exportIcsUpcoming">Export upcoming orders to calendar</button>
         <button class="btn secondary block" id="exportIcsAll">Export ALL orders to calendar</button>
-        <p class="muted small">Downloads an .ics file. Open it and choose “Add All” (iPhone) or open with Google Calendar (Android). Each cake includes its reminder alarms.</p>
+        <p class="muted small">Downloads an .ics file. Open it and choose “Add All” (iPhone) or open with Google Calendar (Android). Each order includes its reminder alarms.</p>
       </div>
       <div class="card">
         <h3>💾 Backup</h3>
@@ -98,9 +105,10 @@
   <section class="page" id="page-detail" hidden></section>
 
   <section class="page" id="page-voice" hidden>
-    <div class="page-head"><button class="icon-btn" data-back>‹ Back</button><h2>Talk to add a cake</h2><span></span></div>
+    <div class="page-head"><button class="icon-btn" data-back>‹ Back</button><h2>Talk to add an order</h2><span></span></div>
     <div class="page-body">
-      <p class="muted center" id="voiceHint">Tap the microphone and say the whole order, e.g.<br><i>“Sarah Johnson, 555-123-4567, birthday cake for Saturday October 10th at 2pm, chocolate with strawberry filling, 8 inch two tier, pink buttercream, says Happy 6th Birthday Emma, pickup, $85, $20 deposit.”</i></p>
+      <p class="muted center" id="voiceHint">Tap the microphone and say the whole order, e.g.<br><i>“Sarah Johnson, 555-123-4567, birthday cake for Saturday October 10th at 2pm, chocolate with strawberry filling, 8 inch two tier, pink buttercream, says Happy 6th Birthday Emma, pickup, $85, $20 deposit.”</i><br><br>
+        or <i>“Jane Doe, two dozen chocolate cupcakes with vanilla buttercream, Friday at 11…”</i> or <i>“three dozen mini oatmeal cream pies, individually wrapped…”</i></p>
       <div class="big-mic-wrap">
         <button class="big-mic" id="bigMic" aria-label="Start talking">🎤</button>
         <div class="mic-status" id="micStatus">Tap to start</div>
@@ -124,7 +132,7 @@
   <nav class="tabbar" aria-label="Main">
     <a href="#/upcoming" data-tab="upcoming"><span>🗓️</span>Upcoming</a>
     <a href="#/calendar" data-tab="calendar"><span>📆</span>Calendar</a>
-    <a href="#/voice" class="tab-mic" aria-label="Talk to add a cake"><span>🎤</span></a>
+    <a href="#/voice" class="tab-mic" aria-label="Talk to add an order"><span>🎤</span></a>
     <a href="#/orders" data-tab="orders"><span>🔎</span>Orders</a>
     <a href="#/settings" data-tab="settings"><span>⚙️</span>More</a>
   </nav>
@@ -133,6 +141,7 @@
 
   <script src="assets/config.js"></script>
   <script src="assets/parser.js"></script>
+  <script src="assets/products.js"></script>
   <script src="assets/ics.js"></script>
   <script src="assets/photos.js"></script>
   <script src="assets/push.js"></script>

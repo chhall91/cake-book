@@ -63,7 +63,7 @@
     'please ok okay so um uh hi hey hello customer name called about calling from party ' +
     'today tomorrow tonight morning afternoon evening noon ' +
     'january february march april may june july august september october november december ' +
-    'sunday monday tuesday wednesday thursday friday saturday cupcakes cupcake sheet dozen ' +
+    'sunday monday tuesday wednesday thursday friday saturday cupcakes cupcake sheet dozen oatmeal cream creme pie pies cookies mini ' +
     'chocolate vanilla red velvet lemon strawberry funfetti buttercream frosting fondant filling says message').split(/\s+/));
   OCCASIONS.forEach(function (o) { o[0].split(' ').forEach(function (w) { NAME_STOP.add(w); }); });
 
@@ -256,12 +256,38 @@
     return res;
   }
 
+  // ---------- product type & quantity ----------
+  // "2 dozen" → {qty:2, unit:'dozen'}; "30" → {qty:30, unit:'each'}; "half a dozen" → 6 each; "a dozen and a half" → 1.5 dozen.
+  function parseQuantity(text) {
+    var t = normalizeText(text).toLowerCase(), m;
+    if (/\bbaker'?s\s+dozen\b/.test(t)) return { qty: 13, unit: 'each' };
+    if ((m = /\b(\d+)\s+and\s+a\s+half\s+dozen\b/.exec(t))) return { qty: +m[1] + 0.5, unit: 'dozen' };
+    if ((m = /\b(\d+(?:\.\d+)?|a|an|one)?\s*dozen\s+and\s+a\s+half\b/.exec(t))) return { qty: (m[1] && /\d/.test(m[1]) ? +m[1] : 1) + 0.5, unit: 'dozen' };
+    if (/\bhalf\s+(?:a\s+)?dozen\b/.test(t)) return { qty: 6, unit: 'each' };
+    if ((m = /\b(\d+(?:\.\d+)?|a|an|one)\s+dozen\b/.exec(t))) return { qty: /\d/.test(m[1]) ? +m[1] : 1, unit: 'dozen' };
+    if (/\bdozens?\b/.test(t)) return { qty: 1, unit: 'dozen' };
+    if ((m = /\b(\d+)\b/.exec(t))) return { qty: +m[1], unit: 'each' };
+    return null;
+  }
+  var CREAMPIE_RE = /\b(?:oatmeal\s+)?(?:cream|creme|crème)\s+pies?(?:\s+cookies?)?\b|\boatmeal\s+(?:sandwich\s+)?(?:pies?|cream\s+sandwich(?:es)?|cream\s+cookies?)\b/i;
+  var CUPCAKE_RE = /\bcupcakes?\b/i;
+  var CAKE_SIGNAL_RE = /\bcake\b|\b\d{1,2}\s*(?:-\s*)?(?:inch(?:es)?|in\.|")|\btier(?:s|ed)?\b|\b(?:quarter|half|full)\s+sheet\b/i;
+  var QTY_BEFORE_RE = new RegExp('(?:\\b(\\d+(?:\\.\\d+)?|a|an|one|half(?:\\s+a)?|a\\s+half|baker\'?s)\\s+)?(?:\\b(dozen)(?:\\s+and\\s+a\\s+half)?\\s+)?(?:of\\s+(?:the\\s+|your\\s+)?)?' +
+    '(?:\\b(mini|minis|miniature|small|bite[- ]size(?:d)?|regular|standard|normal|full[- ]size(?:d)?|large|big|jumbo|giant)\\s+)?' +
+    '((?:\\b(?:' + FLAVORS.map(escRe).join('|') + '|and|&)\\s+){0,4})$', 'i');
+  function sizeFor(word, type) {
+    if (!word) return '';
+    if (/^(mini|minis|miniature|small|bite)/i.test(word)) return 'Mini';
+    if (/^(jumbo|giant|large|big)$/i.test(word)) return type === 'cupcakes' ? 'Jumbo' : 'Regular';
+    return 'Regular';
+  }
+
   // ---------- main parser ----------
   function parseOrder(text, now) {
     now = now || new Date();
     var r = { name: '', phone: '', email: '', fulfillment: '', address: '', customerNotes: '', occasion: '', dueDate: '', dueTime: '',
       size: '', servings: '', tiers: '', shape: '', flavor: '', filling: '', frosting: '', design: '', message: '', allergies: '',
-      price: '', deposit: '', warnings: [] };
+      price: '', deposit: '', productType: '', qty: '', qtyUnit: '', itemSize: '', liners: '', wrapped: '', packaging: '', warnings: [] };
     var w = normalizeText(text);
     var m;
     function cut(str) { w = w.replace(str, ' | '); }
@@ -286,6 +312,45 @@
       }
     }
     w = w.replace(/\b(?:(?:her|his|their|the)\s+)?(?:phone|cell|mobile)(?:\s+number)?(?:\s+is)?\b|\bnumber is\b/gi, ' | ');
+
+    // product type: cupcakes / oatmeal cream pies (cakes are the default)
+    w = w.replace(/\bcup\s+cakes\b/gi, 'cupcakes').replace(/\bcup\s+cake\b/gi, 'cupcake');
+    var cpM = CREAMPIE_RE.exec(w), cuM = CUPCAKE_RE.exec(w);
+    if (cpM || cuM) {
+      var ptype = cpM && cuM ? (cpM.index < cuM.index ? 'creampies' : 'cupcakes') : cpM ? 'creampies' : 'cupcakes';
+      var pm = ptype === 'creampies' ? cpM : cuM;
+      var pname = ptype === 'creampies' ? 'Oatmeal cream pies' : 'Cupcakes';
+      if (CAKE_SIGNAL_RE.test(w.replace(pm[0], ' '))) {
+        r.productType = 'cake';
+        r.warnings.push(pname + ' were mentioned along with a cake – this is saved as a cake order. Add the ' + pname.toLowerCase() + ' as their own order if you like.');
+      } else {
+        r.productType = ptype;
+        if (cpM && cuM) r.warnings.push('You mentioned both cupcakes and cream pies – this order is set to ' + pname.toLowerCase() + '. Add the other as a separate order.');
+        var qb = QTY_BEFORE_RE.exec(w.slice(0, pm.index));
+        var qStart = pm.index, flavStart = pm.index;
+        if (qb) {
+          var qPhrase = qb[0].slice(0, qb[0].length - qb[4].length);
+          if (qb[1] || qb[2]) { var pq = parseQuantity(qPhrase); if (pq) { r.qty = pq.qty; r.qtyUnit = pq.unit; } }
+          if (qb[3]) r.itemSize = sizeFor(qb[3], ptype);
+          qStart = qb.index; flavStart = qb.index + qPhrase.length;
+        }
+        cutSpan(pm.index, pm.index + pm[0].length);
+        if (flavStart > qStart) cutSpan(qStart, flavStart);
+        if (r.qty === '') {
+          // "cupcakes – three dozen", "2 dozen of them", "half a dozen"
+          var qa = /\b(?:\d+(?:\.\d+)?|a|an|one)?\s*(?:and\s+a\s+half\s+)?dozen(?:\s+and\s+a\s+half)?\b|\bhalf\s+(?:a\s+)?dozen\b|\bbaker'?s\s+dozen\b/i.exec(w);
+          if (qa) { var pq2 = parseQuantity(qa[0]); if (pq2) { r.qty = pq2.qty; r.qtyUnit = pq2.unit; } cut(qa[0]); }
+        }
+        if (!r.itemSize && (m = /\b(mini|minis|miniature|bite[- ]size(?:d)?|jumbo)\b/i.exec(w))) { r.itemSize = sizeFor(m[1], ptype); cut(m[0]); }
+        if (ptype === 'creampies') {
+          if ((m = /\b(?:not|no need to be|don'?t need to be|doesn'?t need to be)\s+(?:individually\s+)?wrapped\b|\bunwrapped\b/i.exec(w))) { r.wrapped = 'no'; cut(m[0]); }
+          else if ((m = /\b(?:individually|separately|each\s+(?:one\s+)?)\s*(?:wrapped|bagged|packaged)\b|\bwrapped\s+(?:individually|separately)\b/i.exec(w))) { r.wrapped = 'yes'; cut(m[0]); }
+          if ((m = /\b(?:in\s+)?(?:a\s+|an\s+)?((?:gift|bakery|white|clear|pink|cardboard|plastic|cellophane|cello|treat)\s+)?(box(?:es)?|trays?|platters?|bags?|tins?|containers?)(?:\s+of\s+(\d+))?\b/i.exec(w))) {
+            r.packaging = cap(((m[1] || '') + m[2] + (m[3] ? ' of ' + m[3] : '')).toLowerCase()); cut(m[0]);
+          }
+        }
+      }
+    }
 
     // message on cake
     var msgRe1 = /\b(?:that\s+)?(?:says|saying|reads|reading|message(?:\s+(?:is|on\s+(?:the\s+)?cake|should\s+say|says|reads))?|inscription(?:\s+is)?|writ(?:e|ing)(?:\s+on\s+(?:it|top))?)\s*[:,]?\s*["“]([^"”]+)["”]/i;
@@ -345,7 +410,7 @@
     // customer name
     var nameExplicit = /\b(?:customer(?:'s)?(?:\s+name)?(?:\s+is)?|(?:her|his|their|the|my)\s+name\s+is|name(?:'s|\s+is)|order\s+for|this\s+is\s+for|it'?s\s+for|order\s+from|cake\s+order\s+from)\s*[:,]?\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+){0,2})/i;
     var nameIntro = /\b(?:this is|it's|it is|i'm|i am)\s+([A-Z][a-z'-]+(?:\s+[A-Z][a-z'-]+)?)/;
-    var nameWeak = /\b(?:cake|order)\s+for\s+(?:the\s+)?([A-Z][a-z'-]+(?:\s+[A-Z][a-z'-]+){0,2})/;
+    var nameWeak = /(?:\b(?:cake|cakes|cupcakes|pies|order)|\|)\s+for\s+(?:the\s+)?([A-Z][a-z'-]+(?:\s+[A-Z][a-z'-]+){0,2})/;
     function takeName(str) {
       var words = str.split(/\s+/), keep = [];
       for (var k = 0; k < words.length && keep.length < 3; k++) {
@@ -502,6 +567,20 @@
     }
     w = w.replace(/\b(?:for\s+)?(pick\s?-?\s?up|picking (?:it )?up|pick (?:it|them) up|delivery|deliver(?:ed|ing)?)\b/gi, ' | ');
 
+    // cupcake liners / wrappers ("blue and white liners", "gold foil wrappers")
+    if (r.productType === 'cupcakes' && (m = /\b(?:cupcake\s+)?(?:liners?|wrappers?|cups)\b/i.exec(w))) {
+      var lwords = w.slice(0, m.index).split(/\s+/).filter(Boolean), lk = [], LOK = PURE_COLORS.concat(AMBIG_COLORS, ['foil', 'metallic', 'polka', 'dot', 'dots', 'striped', 'floral', 'paper', 'glitter', 'sparkly', 'and', '&']);
+      for (var li = lwords.length - 1; li >= 0 && lk.length < 6; li--) {
+        var lt = lwords[li].replace(/[^A-Za-z&-]/g, '').toLowerCase();
+        if (!lt || /[,.;|]$/.test(lwords[li]) && lk.length || LOK.indexOf(lt) === -1) break;
+        lk.unshift(lt);
+      }
+      while (lk.length && /^(and|&)$/.test(lk[0])) lk.shift();
+      r.liners = cap(lk.join(' '));
+      var ls = lk.length ? w.slice(0, m.index).lastIndexOf(lk[0]) : m.index;
+      cutSpan(ls, m.index + m[0].length);
+    }
+
     // colors & design
     var colRe = new RegExp('\\b(' + PURE_COLORS.concat(AMBIG_COLORS).map(escRe).join('|') + ')\\b', 'gi');
     while ((m = colRe.exec(w))) {
@@ -523,6 +602,10 @@
       var dd2 = clean(m[1]);
       if (dd2 && dd2.length < 80) design.push(cap(dd2));
     }
+    if (!/topper/i.test(design.join(' ')) && (m = /\b((?:[a-z]+\s+){0,2}?)(toppers?|picks)\b/i.exec(w))) {
+      var tp = m[1].trim().split(/\s+/).filter(function (x) { return x && !/^(a|an|the|with|and|some|on|top|of)$/i.test(x); });
+      design.push(cap((tp.length ? tp.join(' ') + ' ' : '') + m[2].toLowerCase())); cut(m[0]);
+    }
     r.design = design.join('; ');
 
     // notes
@@ -536,6 +619,6 @@
   }
 
   var api = { parseOrder: parseOrder, parseDateTime: parseDateTime, wordsToNumbers: wordsToNumbers, normalizeText: normalizeText,
-    normalizeSpokenEmail: normalizeSpokenEmail, formatPhone: formatPhone, extractNumber: extractNumber, isoDate: isoDate };
+    normalizeSpokenEmail: normalizeSpokenEmail, formatPhone: formatPhone, extractNumber: extractNumber, isoDate: isoDate, parseQuantity: parseQuantity };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CakeParser = api;
 })(this);

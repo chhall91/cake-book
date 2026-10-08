@@ -1,7 +1,7 @@
 /* Cake Book – main app. Plain JS, no dependencies. Data lives in IndexedDB (localStorage fallback). */
 (function () {
   'use strict';
-  var P = window.CakeParser, ICS = window.CakeICS;
+  var P = window.CakeParser, ICS = window.CakeICS, PR = window.CakeProducts;
 
   // ---------- constants ----------
   var STATUSES = ['Inquiry', 'Confirmed', 'In progress', 'Ready', 'Delivered/Picked up', 'Paid'];
@@ -10,30 +10,44 @@
   var FLAVOR_LIST = ['Vanilla', 'Chocolate', 'Red velvet', 'Lemon', 'Strawberry', 'Funfetti', 'Carrot', 'Marble', 'Almond', 'Coconut', 'Salted caramel', 'Cookies & cream'];
   var FILLING_LIST = ['Strawberry', 'Raspberry', 'Lemon curd', 'Chocolate ganache', 'Buttercream', 'Cream cheese', 'Salted caramel', 'Cookies & cream', 'Fresh fruit'];
   var FROSTING_LIST = ['Buttercream', 'Swiss meringue buttercream', 'Cream cheese frosting', 'Whipped cream', 'Fondant', 'Chocolate ganache', 'Naked'];
-  var SIZE_LIST = ['4 inch', '6 inch', '8 inch', '10 inch', '6 & 8 inch', 'Quarter sheet', 'Half sheet', 'Full sheet', '12 cupcakes', '24 cupcakes'];
+  var SIZE_LIST = ['4 inch', '6 inch', '8 inch', '10 inch', '6 & 8 inch', 'Quarter sheet', 'Half sheet', 'Full sheet'];
   var SHAPES = ['', 'Round', 'Square', 'Heart', 'Sheet', 'Rectangle', 'Number', 'Letter', 'Carved', 'Other'];
+  var CUP_FLAVOR_LIST = ['Vanilla', 'Chocolate', 'Red velvet', 'Lemon', 'Strawberry', 'Funfetti', 'Vanilla & chocolate', 'Carrot', 'Cookies & cream', 'Salted caramel', 'Pumpkin spice', 'Coconut'];
+  var COOKIE_LIST = ['Oatmeal (classic)', 'Brown sugar oatmeal', 'Chocolate oatmeal', 'Pumpkin oatmeal', 'Oatmeal raisin', 'Cinnamon oatmeal', 'Maple oatmeal', 'Gingerbread oatmeal'];
+  var CP_FILLING_LIST = ['Marshmallow creme', 'Vanilla buttercream', 'Cream cheese', 'Brown butter', 'Maple', 'Cinnamon', 'Chocolate', 'Pumpkin spice', 'Peanut butter', 'Salted caramel'];
+  var CUP_SIZES = ['Regular', 'Mini', 'Jumbo'], CP_SIZES = ['Regular', 'Mini'];
+  var LINER_LIST = ['White', 'Gold foil', 'Silver foil', 'Pink', 'Blue', 'Black', 'Polka dot', 'Clear / none'];
+  var PACKAGING_LIST = ['Bakery box', 'Gift box', 'Boxes of 6', 'Boxes of 12', 'Tray / platter', 'Cellophane bags', 'Treat bags with ribbon'];
   var REM_DAYS = [[0, 'Same day'], [1, '1 day before'], [2, '2 days before'], [3, '3 days before'], [4, '4 days before'], [5, '5 days before'], [7, '1 week before'], [14, '2 weeks before']];
 
+  // Fields: types = which product types show the field (default: all); labels / lists = per-type label and suggestions.
+  var CU = ['cupcakes'], CP = ['creampies'], CK = ['cake'], BAKED = ['cupcakes', 'creampies'];
   var FORM = [
+    { title: '🍰 What are they ordering?', fields: [{ k: 'productType', type: 'typepicker' }] },
     { title: '👤 Customer', fields: [
       { k: 'name', label: 'Customer name *', type: 'text', cap: 'words' },
       { k: 'phone', label: 'Phone', type: 'tel' },
       { k: 'email', label: 'Email', type: 'email' },
       { k: 'fulfillment', label: 'Pickup or delivery', type: 'segmented', options: [['pickup', '🏠 Pickup'], ['delivery', '🚗 Delivery']] },
       { k: 'address', label: 'Delivery address', type: 'textarea', rows: 2, showIf: 'delivery' },
-      { k: 'customerNotes', label: 'Notes', type: 'textarea', rows: 2 }
+      { k: 'customerNotes', label: 'Notes (private – not texted)', type: 'textarea', rows: 2 }
     ] },
-    { title: '🎂 Cake', fields: [
+    { title: '🎂 Cake', product: true, fields: [
       { k: 'occasion', label: 'Occasion', type: 'text', list: OCCASION_LIST, cap: 'sentences' },
       { k: 'dueDate', label: 'Due date *', type: 'date' },
-      { row: [{ k: 'dueTime', label: 'Time', type: 'time' }, { k: 'tiers', label: 'Tiers', type: 'number', min: 1, max: 9 }] },
-      { k: 'size', label: 'Size', type: 'text', list: SIZE_LIST },
-      { row: [{ k: 'servings', label: 'Servings', type: 'number', min: 1 }, { k: 'shape', label: 'Shape', type: 'select', options: SHAPES }] },
-      { k: 'flavor', label: 'Cake flavor', type: 'text', list: FLAVOR_LIST, cap: 'sentences' },
-      { k: 'filling', label: 'Filling', type: 'text', list: FILLING_LIST, cap: 'sentences' },
-      { k: 'frosting', label: 'Frosting', type: 'text', list: FROSTING_LIST, cap: 'sentences' },
-      { k: 'design', label: 'Colors / design', type: 'textarea', rows: 3 },
-      { k: 'message', label: 'Message on cake', type: 'text', cap: 'sentences' },
+      { row: [{ k: 'dueTime', label: 'Time', type: 'time' }, { k: 'tiers', label: 'Tiers', type: 'number', min: 1, max: 9, types: CK },
+        { k: 'itemSize', label: 'Size', type: 'select', optionsBy: { cupcakes: CUP_SIZES, creampies: CP_SIZES }, types: BAKED }] },
+      { row: [{ k: 'qty', label: 'How many', type: 'qty', types: BAKED }, { k: 'qtyUnit', label: 'Counted in', type: 'segmented', options: [['dozen', 'Dozen'], ['each', 'Each']], types: BAKED, small: true }] },
+      { k: 'size', label: 'Size', type: 'text', list: SIZE_LIST, types: CK },
+      { row: [{ k: 'servings', label: 'Servings', type: 'number', min: 1, types: CK }, { k: 'shape', label: 'Shape', type: 'select', options: SHAPES, types: CK }] },
+      { k: 'flavor', label: 'Cake flavor', labels: { cupcakes: 'Cupcake flavor(s)', creampies: 'Cookie flavor' }, type: 'text', list: FLAVOR_LIST, lists: { cupcakes: CUP_FLAVOR_LIST, creampies: COOKIE_LIST }, cap: 'sentences' },
+      { k: 'filling', label: 'Filling', labels: { creampies: 'Filling flavor' }, type: 'text', list: FILLING_LIST, lists: { creampies: CP_FILLING_LIST }, cap: 'sentences' },
+      { k: 'frosting', label: 'Frosting', type: 'text', list: FROSTING_LIST, cap: 'sentences', types: ['cake', 'cupcakes'] },
+      { k: 'design', label: 'Colors / design', labels: { cupcakes: 'Decorations / toppers' }, type: 'textarea', rows: 3, types: ['cake', 'cupcakes'] },
+      { k: 'liners', label: 'Liners / colors', type: 'text', list: LINER_LIST, cap: 'sentences', types: CU },
+      { k: 'wrapped', label: 'Individually wrapped?', type: 'segmented', options: [['yes', '✓ Yes'], ['no', 'No']], types: CP },
+      { k: 'packaging', label: 'Packaging', type: 'text', list: PACKAGING_LIST, cap: 'sentences', types: CP },
+      { k: 'message', label: 'Message on cake', labels: { cupcakes: 'Message / writing' }, type: 'text', cap: 'sentences', types: ['cake', 'cupcakes'] },
       { k: 'allergies', label: 'Allergies / dietary', type: 'text' }
     ] },
     { title: '💵 Price & status', fields: [
@@ -84,6 +98,17 @@
     if (/wedding|engage|bridal/.test(s)) return '💍'; if (/baby|gender|christen|baptis/.test(s)) return '🍼';
     if (/graduat/.test(s)) return '🎓'; if (/anniv|valentine/.test(s)) return '💕'; if (/birthday/.test(s)) return '🎈';
     if (/christmas|holiday/.test(s)) return '🎄'; if (/retire/.test(s)) return '🌴'; return '🎂';
+  }
+  function orderEmoji(o) { return PR.typeOf(o) === 'cake' ? occasionEmoji(o) : PR.info(o).emoji; }
+  function typePill(o) { var t = PR.typeOf(o), ti = PR.TYPES[t]; return '<span class="pill type-pill tp-' + t + '">' + ti.emoji + ' ' + esc(t === 'cake' ? 'Cake' : ti.plural) + '</span>'; }
+  // Customer-confirmation state: 'confirmed' | 'changed' (details edited after the customer confirmed) | 'sent' | ''
+  function confirmState(o) {
+    if (o.customerConfirmedAt) return o.confirmedSig && o.confirmedSig !== PR.confirmSig(o) ? 'changed' : 'confirmed';
+    return o.confirmSentAt ? 'sent' : '';
+  }
+  function confirmPill(o) {
+    var c = confirmState(o);
+    return c === 'confirmed' ? '<span class="pill ok">✅ Customer confirmed</span>' : c === 'changed' ? '<span class="pill warn">✏️ Changed since confirmed</span>' : c === 'sent' ? '<span class="pill plain">💬 Waiting for reply</span>' : '';
   }
   function telHref(p) { return 'tel:' + String(p || '').replace(/[^\d+]/g, ''); }
   function smsHref(p) { return 'sms:' + String(p || '').replace(/[^\d+]/g, ''); }
@@ -177,6 +202,10 @@
         var d = P.parseDateTime(said);
         if (d.date) input.value = d.date; else toast('Could not understand that date: “' + said + '”');
         if (d.time && input.form && input.form.dueTime && !input.form.dueTime.value) input.form.dueTime.value = d.time;
+      } else if (kind === 'qty') {
+        var q = P.parseQuantity(said);
+        if (q) { input.value = q.qty; var u = input.form && input.form.querySelector('input[name=qtyUnit][value=' + q.unit + ']'); if (u) u.checked = true; }
+        else toast('Could not understand that amount: “' + said + '”');
       } else if (kind === 'tel') input.value = P.formatPhone(P.wordsToNumbers(said).replace(/[^\d+]/g, ''));
       else if (kind === 'email') input.value = P.normalizeSpokenEmail(said);
       else { var txt = said.charAt(0).toUpperCase() + said.slice(1); input.value = (base ? base + ' ' : '') + txt; }
@@ -214,21 +243,21 @@
   function cardHTML(o, opts) {
     opts = opts || {};
     var overdue = isPast(o) && !isDone(o);
-    var desc = [o.size, o.tiers > 1 ? o.tiers + ' tiers' : '', o.flavor, o.filling ? o.filling + ' filling' : '', o.frosting].filter(Boolean).join(' · ');
+    var desc = PR.cardDesc(o), isCake = PR.typeOf(o) === 'cake';
     var t = o.dueTime ? fmtTime(o.dueTime) : '', ampm = (t.match(/\s?[AP]M$/i) || [''])[0];
     var timeBox = opts.showDate
       ? '<div class="time">' + esc(o.dueDate ? fmtDate(o.dueDate, { month: 'short', day: 'numeric' }) : '—') + '<small>' + esc(t || (o.dueDate ? parseISO(o.dueDate).getFullYear() : '')) + '</small></div>'
       : '<div class="time">' + (t ? esc(t.replace(ampm, '')) + '<small>' + esc(ampm.trim()) + '</small>' : '<small>All day</small>') + '</div>';
     var bal = balance(o);
     return '<div class="order-card' + (overdue ? ' overdue' : '') + '" role="button" tabindex="0" data-open="' + esc(o.id) + '">' + timeBox +
-      '<div class="info"><div class="name">' + occasionEmoji(o) + ' ' + esc(o.name || 'Unnamed') + '</div>' +
-      '<div class="desc">' + esc([o.occasion, desc].filter(Boolean).join(' – ') || 'No cake details yet') + '</div>' +
-      '<div class="meta"><span class="pill ' + statusClass(o.status) + '">' + esc(o.status) + '</span>' +
+      '<div class="info"><div class="name">' + orderEmoji(o) + ' ' + esc(o.name || 'Unnamed') + '</div>' +
+      '<div class="desc">' + esc([o.occasion, desc].filter(Boolean).join(' – ') || (isCake ? 'No cake details yet' : PR.productPhrase(o))) + '</div>' +
+      '<div class="meta">' + typePill(o) + '<span class="pill ' + statusClass(o.status) + '">' + esc(o.status) + '</span>' +
       '<span class="pill plain">' + (o.fulfillment === 'delivery' ? '🚗 Delivery' : '🏠 Pickup') + '</span>' +
       (o.allergies ? '<span class="pill warn">⚠ Allergy</span>' : '') +
       (bal > 0 ? '<span class="pill plain">Due ' + money(bal) + '</span>' : '') +
       (nPhotos(o) ? '<span class="pill photo-pill" aria-label="' + nPhotos(o) + ' photos">📷 ' + nPhotos(o) + '</span>' : '') +
-      (overdue ? '<span class="pill warn">Past due</span>' : '') + '</div></div>' +
+      confirmPill(o) + (overdue ? '<span class="pill warn">Past due</span>' : '') + '</div></div>' +
       (nPhotos(o) ? '<img class="thumb" data-pid="' + esc(o.photos[0].id) + '" alt="">' : '') +
       (o.phone ? '<a class="call" href="' + telHref(o.phone) + '" aria-label="Call ' + esc(o.name) + '" data-stop>📞</a>' : '') +
       '</div>';
@@ -237,11 +266,24 @@
   function emptyHTML(title, text) { return '<div class="empty"><span class="big-emoji">🧁</span><h3>' + esc(title) + '</h3><p>' + text + '</p></div>'; }
 
   // ---------- upcoming ----------
+  var typeFilter = 'all';
+  try { typeFilter = sessionStorage.getItem('typeFilter') || 'all'; } catch (e) {}
+  function renderTypeChips(box, counts) {
+    box.innerHTML = [['all', '📋', 'All']].concat(PR.ORDER.map(function (k) { return [k, PR.TYPES[k].emoji, PR.TYPES[k].plural]; })).map(function (c) {
+      var n = counts[c[0]] || 0;
+      return '<button class="chip' + (c[0] === typeFilter ? ' on' : '') + '" data-typefilter="' + c[0] + '" aria-pressed="' + (c[0] === typeFilter) + '" aria-label="' + esc(c[2] + ', ' + n) + '">' +
+        '<span class="te">' + c[1] + (n ? '<span class="chip-n">' + n + '</span>' : '') + '</span><span class="tl">' + esc(c[2]) + '</span></button>';
+    }).join('');
+  }
   function renderUpcoming() {
     var showDone = $('#showDone').checked;
+    var counts = { all: 0 };
+    state.orders.forEach(function (o) { if (!isDone(o) || showDone) { counts.all++; var t = PR.typeOf(o); counts[t] = (counts[t] || 0) + 1; } });
+    renderTypeChips($('#typeChips'), counts);
     var today = startOfDay(new Date()), weekEnd = addDays(today, 7);
     var g = { overdue: [], today: [], week: [], later: [], nodate: [], done: [] };
     state.orders.slice().sort(byDue).forEach(function (o) {
+      if (typeFilter !== 'all' && PR.typeOf(o) !== typeFilter) return;
       if (!o.dueDate) { g.nodate.push(o); return; }
       var d = parseISO(o.dueDate);
       if (isDone(o)) { if (showDone) g.done.push(o); return; }
@@ -266,8 +308,9 @@
     section('Later', g.later, true);
     section('No date yet', g.nodate, false);
     section('Finished', g.done.reverse(), true);
+    if (!html && typeFilter !== 'all' && state.orders.length) html = emptyHTML('No ' + PR.TYPES[typeFilter].plural.toLowerCase() + ' coming up', 'Tap <b>All</b> to see every order.');
     if (!html) html = state.orders.length
-      ? emptyHTML('All caught up!', 'No upcoming cakes. Tap “Talk to add a cake” when the next order comes in.')
+      ? emptyHTML('All caught up!', 'No upcoming orders. Tap “Talk to add an order” when the next one comes in.')
       : emptyHTML('No cake orders yet', 'Tap <b>🎤 Talk to add a cake</b> and just say the order,<br>or type it in with <b>＋ Type a new order</b>.');
     $('#upcomingList').innerHTML = html;
     PH.hydrate($('#upcomingList'));
@@ -286,14 +329,14 @@
       var d = addDays(start, i), di = iso(d), list = byDay[di] || [];
       if (i % 7 === 0 && i >= 28 && d.getMonth() !== mo) break;
       var cls = 'cal-day' + (d.getMonth() !== mo ? ' other' : '') + (di === todayIso ? ' today' : '') + (di === calState.selected ? ' selected' : '') + (list.length ? ' has' : '');
-      var dots = list.slice(0, 4).map(function (o) { return '<i class="dot' + (isClosed(o) ? ' done' : '') + '"></i>'; }).join('');
-      html += '<button class="' + cls + '" data-day="' + di + '" aria-label="' + esc(d.toDateString() + (list.length ? ', ' + list.length + ' cake' + (list.length > 1 ? 's' : '') : '')) + '">' + d.getDate() + '<span class="dots">' + dots + '</span></button>';
+      var dots = list.slice(0, 4).map(function (o) { return '<i class="dot dot-' + PR.typeOf(o) + (isClosed(o) ? ' done' : '') + '"></i>'; }).join('');
+      html += '<button class="' + cls + '" data-day="' + di + '" aria-label="' + esc(d.toDateString() + (list.length ? ', ' + list.length + ' order' + (list.length > 1 ? 's' : '') : '')) + '">' + d.getDate() + '<span class="dots">' + dots + '</span></button>';
     }
     $('#calGrid').innerHTML = html;
     var sel = (byDay[calState.selected] || []).sort(byDue);
     $('#calDayTitle').textContent = fmtDate(calState.selected, { weekday: 'long', month: 'long', day: 'numeric' });
     $('#calDayList').innerHTML = sel.length ? sel.map(function (o) { return cardHTML(o); }).join('')
-      : '<p class="muted center">No cakes this day. <a href="#/new" data-newon="' + calState.selected + '">Add one</a></p>';
+      : '<p class="muted center">No orders this day. <a href="#/new" data-newon="' + calState.selected + '">Add one</a></p>';
     PH.hydrate($('#calDayList'));
   }
 
@@ -326,7 +369,8 @@
     page.innerHTML =
       '<div class="page-head"><button class="icon-btn" data-back>‹ Back</button><h2>' + esc(o.name || 'Order') + '</h2><a class="icon-btn strong linkbtn" href="#/edit/' + esc(o.id) + '">Edit</a></div>' +
       '<div class="page-body">' +
-      '<div class="detail-hero"><div class="hero-emoji">' + occasionEmoji(o) + '</div>' +
+      '<div class="detail-hero"><div class="hero-emoji">' + orderEmoji(o) + '</div>' +
+      '<div class="hero-product">' + esc(PR.productPhrase(o)) + '</div>' +
       '<div class="when">' + esc(fmtDate(o.dueDate)) + (o.dueTime ? ' · ' + esc(fmtTime(o.dueTime)) : '') + '</div>' +
       '<div class="sub">' + esc([o.occasion, relDay(o.dueDate), o.fulfillment === 'delivery' ? '🚗 Delivery' : '🏠 Pickup'].filter(Boolean).join(' · ')) + '</div></div>' +
       '<div class="action-row">' +
@@ -335,15 +379,14 @@
       (mapUrl ? '<a href="' + mapUrl + '" target="_blank" rel="noopener"><span>🗺️</span>Map</a>' : '') +
       '<button data-ics="' + esc(o.id) + '"><span>📅</span>Calendar</button></div>' +
       (o.allergies ? '<div class="allergy">⚠️ Allergies / dietary: ' + esc(o.allergies) + '</div>' : '') +
+      confirmCardHTML(o) +
       '<div class="card"><h4 class="mt0">Status</h4><div class="status-picker">' + STATUSES.map(function (s) { return '<button class="' + statusClass(s) + (o.status === s ? ' on' : '') + '" data-status="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div></div>' +
       '<div class="card"><h3>📷 Photos' + (nPhotos(o) ? ' <span class="count">' + nPhotos(o) + '</span>' : '') + '</h3>' +
       (nPhotos(o) ? '<div class="photo-grid">' + o.photos.map(function (p, i) {
         return '<button class="ph-tile" data-photo-open="' + esc(o.id) + '" data-i="' + i + '" aria-label="Open photo ' + (i + 1) + '"><img data-pid="' + esc(p.id) + '" alt="' + esc(p.caption || 'Photo ' + (i + 1)) + '">' +
           (p.caption ? '<span class="ph-cap">' + esc(p.caption) + '</span>' : '') + '</button>';
       }).join('') + '</div>' : '<p class="muted small">No photos yet. <a href="#/edit/' + esc(o.id) + '">Add the picture the customer sent</a></p>') + '</div>' +
-      '<div class="card"><h3>🎂 The cake</h3>' + (o.message ? '<div class="message-plaque">“' + esc(o.message) + '”</div>' : '') +
-      '<dl class="kv">' + row('Occasion', esc(o.occasion)) + row('Size', esc(o.size)) + row('Tiers', esc(o.tiers)) + row('Shape', esc(o.shape)) + row('Servings', esc(o.servings)) +
-      row('Flavor', esc(o.flavor)) + row('Filling', esc(o.filling)) + row('Frosting', esc(o.frosting)) + row('Colors / design', esc(o.design).replace(/\n/g, '<br>')) + '</dl></div>' +
+      productCardHTML(o, row) +
       '<div class="card"><h3>💵 Money</h3><dl class="kv">' + row('Price', money(o.price)) + row('Deposit paid', money(o.deposit)) + '</dl>' +
       '<div class="balance-box"><span>Balance due</span><span>' + (o.status === 'Paid' ? 'Paid in full ✓' : money(balance(o))) + '</span></div></div>' +
       '<div class="card"><h3>👤 Customer</h3><dl class="kv">' + row('Name', esc(o.name)) +
@@ -360,15 +403,44 @@
     return page;
   }
 
+  function productCardHTML(o, row) {
+    var t = PR.typeOf(o), msg = (t !== 'creampies' && o.message) ? '<div class="message-plaque">“' + esc(o.message) + '”</div>' : '';
+    var rows = row('Occasion', esc(o.occasion));
+    if (t === 'cake') {
+      rows += row('Size', esc(o.size)) + row('Tiers', esc(o.tiers)) + row('Shape', esc(o.shape)) + row('Servings', esc(o.servings)) +
+        row('Flavor', esc(o.flavor)) + row('Filling', esc(o.filling)) + row('Frosting', esc(o.frosting)) + row('Colors / design', esc(o.design).replace(/\n/g, '<br>'));
+    } else {
+      PR.specRows(o).forEach(function (r) { if (r[0] !== 'Message') rows += row(r[0], esc(r[1]).replace(/\n/g, '<br>')); });
+    }
+    return '<div class="card product-card"><h3>' + PR.info(o).detail + '</h3>' + msg + '<dl class="kv">' + rows + '</dl></div>';
+  }
+  function confirmText(o) { return PR.summaryText(o, { signature: state.settings.signature }); }
+  function confirmCardHTML(o) {
+    if (!o.phone) return '';
+    var c = confirmState(o), when = function (t) { return new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); };
+    var line = c === 'confirmed' ? '✅ Customer confirmed ' + esc(when(o.customerConfirmedAt))
+      : c === 'changed' ? '✏️ You changed this order after the customer confirmed (' + esc(when(o.customerConfirmedAt)) + '). Text them the new details.'
+      : c === 'sent' ? '💬 Confirmation text opened ' + esc(when(o.confirmSentAt)) + ' – waiting for their reply.'
+      : 'Text the customer a summary so they can check everything is right.';
+    return '<div class="card confirm-card' + (c === 'confirmed' ? ' is-confirmed' : '') + '"><h3>💬 Customer confirmation</h3><p class="small confirm-line">' + line + '</p>' +
+      '<a class="btn block big confirm-send" href="' + esc(PR.smsLink(o.phone, confirmText(o), IS_IOS)) + '" data-confirm-send="' + esc(o.id) + '">💬 Text for confirmation</a>' +
+      '<button class="btn block ' + (c === 'confirmed' ? 'ok-btn' : 'secondary') + '" data-confirm-toggle="' + esc(o.id) + '" aria-pressed="' + (c === 'confirmed') + '">' +
+      (c === 'confirmed' ? '✅ Customer confirmed (tap to undo)' : '👍 Mark customer confirmed') + '</button>' +
+      '<details class="msg-preview"><summary>Preview the message</summary><pre class="sms-preview">' + esc(confirmText(o)) + '</pre>' +
+      '<button class="btn link small-btn" data-copy-summary="' + esc(o.id) + '">Copy text</button></details></div>';
+  }
+
   // ---------- form ----------
   function fieldHTML(f, o, voiceKeys) {
     var v = o[f.k] == null ? '' : o[f.k], id = 'f_' + f.k, vf = voiceKeys[f.k] ? ' voice-filled' : '';
-    var mic = '<button type="button" class="mic" data-mic="' + id + '" aria-label="Dictate ' + esc(f.label) + '">🎤</button>';
-    var lab = '<label for="' + id + '">' + esc(f.label) + '</label>';
-    var listAttr = f.list ? ' list="dl_' + f.k + '"' : '';
-    var dl = f.list ? '<datalist id="dl_' + f.k + '">' + f.list.map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>' : '';
+    var t = PR.typeOf(o), label = (f.labels && f.labels[t]) || f.label;
+    var mic = '<button type="button" class="mic" data-mic="' + id + '" aria-label="Dictate ' + esc(label) + '">🎤</button>';
+    var lab = '<label for="' + id + '"' + (f.labels ? ' data-labels="' + esc(JSON.stringify(Object.assign({ _: f.label }, f.labels))) + '"' : '') + '>' + esc(label) + '</label>';
+    var lists = f.list ? Object.assign({ _: f.list }, f.lists || {}) : null;
+    var listAttr = lists ? ' list="dl_' + f.k + '_' + (f.lists && f.lists[t] ? t : '_') + '"' + (f.lists ? ' data-lists="1"' : '') : '';
+    var dl = lists ? Object.keys(lists).map(function (lk) { return '<datalist id="dl_' + f.k + '_' + lk + '">' + lists[lk].map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>'; }).join('') : '';
     var capA = f.cap ? ' autocapitalize="' + f.cap + '"' : '';
-    var wrapAttrs = f.showIf ? ' data-showif="' + f.showIf + '"' : '';
+    var wrapAttrs = (f.showIf ? ' data-showif="' + f.showIf + '"' : '') + (f.types ? ' data-types="' + f.types.join(' ') + '"' : '');
     function wrap(inner) { return '<div class="field"' + wrapAttrs + '>' + lab + '<div class="input-wrap' + vf + '">' + inner + '</div>' + dl + '</div>'; }
     switch (f.type) {
       case 'text': case 'tel': case 'email':
@@ -382,12 +454,21 @@
         return wrap('<input id="' + id + '" name="' + f.k + '" type="time" step="60" value="' + esc(v) + '" data-kind="time">');
       case 'number':
         return wrap('<input id="' + id + '" name="' + f.k + '" type="text" inputmode="numeric" pattern="[0-9]*" value="' + esc(v) + '" data-kind="number">');
+      case 'qty':
+        return wrap('<input id="' + id + '" name="' + f.k + '" type="text" inputmode="decimal" value="' + esc(v) + '" data-kind="qty" placeholder="e.g. 2">' + mic);
       case 'money':
         return wrap('<input id="' + id + '" name="' + f.k + '" type="text" inputmode="decimal" value="' + esc(v) + '" data-kind="money" placeholder="0">');
       case 'select':
-        return wrap('<select id="' + id + '" name="' + f.k + '">' + f.options.map(function (x) { return '<option value="' + esc(x) + '"' + (x === v ? ' selected' : '') + '>' + esc(x || '—') + '</option>'; }).join('') + '</select>');
+        var opts = f.optionsBy ? (f.optionsBy[t] || f.optionsBy[Object.keys(f.optionsBy)[0]]) : f.options;
+        if (f.optionsBy && v && opts.indexOf(v) === -1) opts = opts.concat([v]);
+        return wrap('<select id="' + id + '" name="' + f.k + '">' + opts.map(function (x) { return '<option value="' + esc(x) + '"' + (x === v ? ' selected' : '') + '>' + esc(x || '—') + '</option>'; }).join('') + '</select>');
       case 'segmented':
-        return '<div class="field"><span class="field-label">' + esc(f.label) + '</span><div class="segmented' + vf + '">' + f.options.map(function (x) { return '<label><input type="radio" name="' + f.k + '" value="' + x[0] + '"' + (v === x[0] ? ' checked' : '') + '><span>' + x[1] + '</span></label>'; }).join('') + '</div></div>';
+        return '<div class="field"' + wrapAttrs + '><span class="field-label">' + esc(f.label) + '</span><div class="segmented' + (f.small ? ' seg-small' : '') + vf + '">' + f.options.map(function (x) { return '<label><input type="radio" name="' + f.k + '" value="' + x[0] + '"' + (v === x[0] ? ' checked' : '') + '><span>' + x[1] + '</span></label>'; }).join('') + '</div></div>';
+      case 'typepicker':
+        return '<div class="type-picker' + vf + '" role="radiogroup" aria-label="Product">' + PR.ORDER.map(function (k) {
+          var ti = PR.TYPES[k];
+          return '<label><input type="radio" name="productType" value="' + k + '"' + (t === k ? ' checked' : '') + '><span><b>' + ti.emoji + '</b>' + esc(k === 'creampies' ? 'Oatmeal cream pies' : ti.label) + '</span></label>';
+        }).join('') + '</div>';
       case 'balance':
         return '<div class="balance-box"><span>Balance due</span><span id="balanceVal"></span></div>';
     }
@@ -414,6 +495,9 @@
     if (!isEdit && fromVoice && existing.deposit) o.status = 'Confirmed';
     if (!isEdit && existing && existing._newOn) o.dueDate = existing._newOn;
     if (!o.fulfillment) o.fulfillment = 'pickup';
+    o.productType = PR.typeOf(o);
+    if (!o.qtyUnit) o.qtyUnit = 'dozen';
+    if (!o.itemSize) o.itemSize = 'Regular';
     o.reminders = (o.reminders || []).map(function (r) { return { days: +r.days, time: r.time }; });
     var voiceKeys = {};
     if (fromVoice) Object.keys(existing).forEach(function (k) { if (existing[k] !== '' && existing[k] != null && k !== 'warnings' && k !== 'transcript') voiceKeys[k] = 1; });
@@ -424,7 +508,7 @@
         (existing.warnings && existing.warnings.length ? '<ul>' + existing.warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>' : '') + '</div>';
     }
     FORM.forEach(function (sec) {
-      html += '<div class="form-section"><h3>' + sec.title + '</h3>';
+      html += '<div class="form-section"><h3' + (sec.product ? ' id="productTitle"' : '') + '>' + (sec.product ? PR.info(o).section : sec.title) + '</h3>';
       sec.fields.forEach(function (f) {
         html += f.row ? '<div class="two-col">' + f.row.map(function (x) { return fieldHTML(x, o, voiceKeys); }).join('') + '</div>' : fieldHTML(f, o, voiceKeys);
       });
@@ -483,11 +567,30 @@
         else toast(files.length === 1 ? 'Photo added 📷' : files.length + ' photos added 📷');
       });
     };
+    function curType() { return (form.querySelector('input[name=productType]:checked') || { value: 'cake' }).value; }
+    var shownType = null;
+    // Switching product type relabels fields, swaps suggestion lists and shows/hides type-specific fields.
+    // Values typed into hidden fields are kept (switching back restores them) but are ignored for this type.
+    function applyType(t) {
+      shownType = t;
+      $('#productTitle').textContent = PR.TYPES[t].section;
+      $$('label[data-labels]', form).forEach(function (l) { var m = JSON.parse(l.dataset.labels); l.textContent = m[t] || m._; var mb = l.parentNode.querySelector('.mic'); if (mb) mb.setAttribute('aria-label', 'Dictate ' + l.textContent); });
+      $$('input[data-lists]', form).forEach(function (inp) { var id = 'dl_' + inp.name + '_' + t; inp.setAttribute('list', document.getElementById(id) ? id : 'dl_' + inp.name + '__'); });
+      var sel = form.elements.itemSize;
+      if (sel) {
+        var opts = t === 'creampies' ? CP_SIZES : CUP_SIZES, cur = sel.value;
+        sel.innerHTML = opts.map(function (x) { return '<option value="' + esc(x) + '">' + esc(x) + '</option>'; }).join('');
+        sel.value = opts.indexOf(cur) >= 0 ? cur : 'Regular';
+      }
+    }
     function refresh() {
       var fd = form.elements, pr = parseFloat(fd.price.value), dp = parseFloat(fd.deposit.value);
       $('#balanceVal').textContent = fd.status.value === 'Paid' ? 'Paid in full ✓' : (isNaN(pr) ? '—' : money(Math.max(pr - (isNaN(dp) ? 0 : dp), 0)));
-      var ful = (form.querySelector('input[name=fulfillment]:checked') || {}).value;
-      $$('[data-showif]', form).forEach(function (el) { el.hidden = el.dataset.showif !== ful; });
+      var ful = (form.querySelector('input[name=fulfillment]:checked') || {}).value, t = curType();
+      if (t !== shownType) applyType(t);
+      $$('[data-showif],[data-types]', form).forEach(function (el) {
+        el.hidden = (el.dataset.showif && el.dataset.showif !== ful) || (el.dataset.types && el.dataset.types.split(' ').indexOf(t) === -1);
+      });
     }
     form.oninput = form.onchange = refresh;
     refresh();
@@ -517,6 +620,9 @@
         shape: fd.shape.value, flavor: fd.flavor.value.trim(), filling: fd.filling.value.trim(), frosting: fd.frosting.value.trim(),
         design: fd.design.value.trim(), message: fd.message.value.trim(), allergies: fd.allergies.value.trim(),
         price: num(fd.price.value), deposit: num(fd.deposit.value), status: fd.status.value, photos: photos.slice(),
+        productType: curType(), qty: num(fd.qty.value), qtyUnit: (form.querySelector('input[name=qtyUnit]:checked') || { value: 'dozen' }).value,
+        itemSize: fd.itemSize.value, liners: fd.liners.value.trim(), wrapped: (form.querySelector('input[name=wrapped]:checked') || { value: '' }).value,
+        packaging: fd.packaging.value.trim(),
         reminders: o.reminders.filter(function (r) { return r.time; })
       });
       delete rec._newOn; delete rec.warnings;
@@ -524,7 +630,7 @@
       if (isEdit) state.orders = state.orders.map(function (x) { return x.id === rec.id ? rec : x; }); else state.orders.push(rec);
       Push.markDirty(rec.id);
       removedIds.forEach(function (pid) { Store.photoDel(pid).catch(function () {}); });
-      persist().then(function () { toast(isEdit ? 'Order updated ✓' : 'Cake order saved 🎂'); })
+      persist().then(function () { toast(isEdit ? 'Order updated ✓' : (rec.productType === 'cake' ? 'Cake order' : PR.TYPES[rec.productType].label + ' order') + ' saved ' + PR.TYPES[rec.productType].emoji); })
         .catch(function () { toast('Could not save – phone storage may be full.', 5000); });
       if (fromVoice) $('#transcript').value = '';
       location.replace('#/order/' + rec.id);
@@ -596,7 +702,7 @@
     if (list.length) {
       html += '<h4>🔔 Coming up soon</h4><ul>' + list.slice(0, 5).map(function (o) {
         return '<li><button data-open="' + esc(o.id) + '"><b>' + esc(fmtDate(o.dueDate)) + (o.dueTime ? ' ' + esc(fmtTime(o.dueTime)) : '') + '</b> · ' + esc(o.name) +
-          (o.occasion ? ' – ' + esc(o.occasion) : '') + ' <span class="muted">(' + (isPast(o) ? 'past due – mark delivered?' : relDay(o.dueDate)) + ')</span></button></li>';
+          ' – ' + esc(PR.productPhrase(o)) + ' <span class="muted">(' + (isPast(o) ? 'past due – mark delivered?' : relDay(o.dueDate)) + ')</span></button></li>';
       }).join('') + '</ul>';
     }
     html += '<div class="row">' + (canAsk ? '<button class="btn small-btn" id="bannerNotif">Turn on alerts</button>' : '') + '<button class="btn link small-btn" id="bannerHide">Hide</button></div>';
@@ -619,7 +725,7 @@
     try { var n = new Notification(title, opts); n.onclick = function () { window.focus(); location.hash = url; }; } catch (e) {}
     return Promise.resolve();
   }
-  // What the push server gets for one order: only customer name, occasion and due date/time.
+  // What the push server gets for one order: customer name, product + quantity, occasion and due date/time.
   function pushRemindersFor(o) {
     if (!o || !o.dueDate || isClosed(o)) return [];
     var now = Date.now();
@@ -629,10 +735,16 @@
       var n = daysBetween(t, parseISO(o.dueDate));
       return {
         fireAt: t.toISOString(),
-        title: '🎂 ' + (n <= 0 ? 'Today: ' : n === 1 ? 'Tomorrow: ' : 'In ' + n + ' days: ') + (o.name || 'Cake') + (o.occasion ? ' – ' + o.occasion : ''),
+        title: reminderTitle(o, n),
         body: 'Due ' + fmtDate(o.dueDate) + (o.dueTime ? ' at ' + fmtTime(o.dueTime) : '')
       };
     }).filter(Boolean).slice(0, 20);
+  }
+  // "🧁 Tomorrow: 2 dozen cupcakes for Jane Doe – Baby shower", "🎂 Today: Birthday cake for Sarah Johnson"
+  function reminderTitle(o, n) {
+    var cake = PR.typeOf(o) === 'cake';
+    return PR.info(o).emoji + ' ' + (n <= 0 ? 'Today: ' : n === 1 ? 'Tomorrow: ' : 'In ' + n + ' days: ') + PR.productPhrase(o) + ' for ' + (o.name || 'customer') +
+      (!cake && o.occasion ? ' – ' + o.occasion : '');
   }
   function checkReminders() {
     if (!('Notification' in window) || Notification.permission !== 'granted' || Push.isOn()) return;
@@ -644,7 +756,7 @@
         if (t <= now && now - t < 36 * 3600000 && !state.settings.notified[key]) {
           state.settings.notified[key] = Date.now(); changed = true;
           var n = daysBetween(now, parseISO(o.dueDate));
-          notify('🎂 ' + (n <= 0 ? 'Today: ' : n === 1 ? 'Tomorrow: ' : 'In ' + n + ' days: ') + (o.name || 'Cake') + (o.occasion ? ' – ' + o.occasion : ''),
+          notify(reminderTitle(o, n),
             [fmtDate(o.dueDate) + (o.dueTime ? ' at ' + fmtTime(o.dueTime) : ''), o.fulfillment === 'delivery' ? 'Delivery' : 'Pickup', o.flavor, o.allergies ? '⚠ ' + o.allergies : ''].filter(Boolean).join(' · '),
             key, '#/order/' + o.id);
         }
@@ -660,6 +772,7 @@
   // ---------- settings, export, backup ----------
   function renderSettings() {
     renderNotifCard();
+    $('#signatureInput').value = state.settings.signature || '';
     var ed = reminderEditor($('#defaultReminders'), state.settings.defaultReminders, persistSettings);
     $('#addDefaultReminder').onclick = function () { ed.add(); };
     var n = state.orders.length, base = n + ' order' + (n === 1 ? '' : 's') + ' saved on this device.';
@@ -725,7 +838,7 @@
     var t0 = Date.now();
     if (ids.length) toast('Preparing backup with ' + ids.length + ' photo' + (ids.length === 1 ? '' : 's') + '…', 8000);
     PH.exportPhotos(ids).then(function (photos) {
-      var data = { app: 'cake-book', version: 2, exportedAt: new Date().toISOString(), orders: state.orders, photos: photos, settings: { defaultReminders: state.settings.defaultReminders } };
+      var data = { app: 'cake-book', version: 2, exportedAt: new Date().toISOString(), orders: state.orders, photos: photos, settings: { defaultReminders: state.settings.defaultReminders, signature: state.settings.signature || '' } };
       var b = { name: 'cake-book-backup-' + iso(new Date()) + '.json', text: JSON.stringify(data), sig: backupSig() };
       // Safari only allows the share sheet right after a tap; if preparing took a while, ask for one more tap.
       if (IS_IOS && Date.now() - t0 > 700) {
@@ -747,12 +860,14 @@
       var photos = Array.isArray(data.photos) ? data.photos : [];
       if (!confirm('Restore ' + list.length + ' order(s)' + (photos.length ? ' and ' + photos.length + ' photo(s)' : '') + ' from this backup?\nOrders already here with the same ID will be replaced; others are kept.')) return;
       toast('Restoring…', 8000);
+      migrateProductTypes(list);
       PH.importPhotos(photos).then(function () { return migrateLegacyPhotos(list); }).then(function () {
         var map = {};
         state.orders.forEach(function (o) { map[o.id] = o; });
         list.forEach(function (o) { if (map[o.id] && map[o.id] !== o) deleteReplacedPhotos(map[o.id], o); map[o.id] = o; });
         state.orders = Object.keys(map).map(function (k) { return map[k]; });
         if (data.settings && Array.isArray(data.settings.defaultReminders)) state.settings.defaultReminders = data.settings.defaultReminders;
+        if (data.settings && typeof data.settings.signature === 'string' && !state.settings.signature) state.settings.signature = data.settings.signature;
         return Promise.all([persist(), persistSettings()]);
       }).then(function () { Push.fullSync(); toast('Restored ' + list.length + ' order' + (list.length === 1 ? '' : 's') + (photos.length ? ' and ' + photos.length + ' photos' : '') + ' ✓', 4000); route(); })
         .catch(function () { toast('Restore failed – the phone may be out of storage space.', 6000); });
@@ -769,6 +884,12 @@
     return { filePrefix: 'cake-' + slug(name || 'photo'),
       onShared: function (r) { if (r === 'opened') toast('Press and hold the picture to save it to Photos', 4000); },
       onError: function () { toast('Could not share this photo'); } };
+  }
+  // v6: orders gained a product type. Older orders (and old backups) are cakes; nothing else is touched.
+  function migrateProductTypes(orders) {
+    var changed = false;
+    orders.forEach(function (o) { if (o && !PR.TYPES[o.productType]) { o.productType = 'cake'; changed = true; } });
+    return changed;
   }
   // Old versions stored one downscaled data URL in order.photo – move it into the photos store.
   function migrateLegacyPhotos(orders) {
@@ -812,6 +933,32 @@
         renderCalendar(); return;
       }
       if ((el = t.closest('[data-filter]'))) { orderFilter = el.dataset.filter; renderOrders(); return; }
+      if ((el = t.closest('[data-typefilter]'))) { typeFilter = el.dataset.typefilter; try { sessionStorage.setItem('typeFilter', typeFilter); } catch (x) {} renderUpcoming(); return; }
+      if ((el = t.closest('[data-confirm-send]'))) {
+        // the link itself opens Messages with the summary filled in; we just note when it was sent
+        var cs = getOrder(el.dataset.confirmSend); if (!cs) return;
+        if (confirmState(cs) === 'changed') { delete cs.customerConfirmedAt; delete cs.confirmedSig; }
+        cs.confirmSentAt = Date.now(); cs.updatedAt = Date.now(); persist();
+        setTimeout(function () { if (location.hash === '#/order/' + cs.id) { var y = $('#page-detail').scrollTop; renderDetail(cs.id); $('#page-detail').scrollTop = y; } }, 600);
+        return;
+      }
+      if ((el = t.closest('[data-confirm-toggle]'))) {
+        var ct = getOrder(el.dataset.confirmToggle); if (!ct) return;
+        var msg;
+        if (confirmState(ct) === 'confirmed') { delete ct.customerConfirmedAt; delete ct.confirmedSig; msg = 'Marked as not confirmed yet'; }
+        else {
+          ct.customerConfirmedAt = Date.now(); ct.confirmedSig = PR.confirmSig(ct); msg = 'Customer confirmed ✅';
+          if (ct.status === 'Inquiry') { ct.status = 'Confirmed'; msg += ' · Status: Confirmed'; Push.markDirty(ct.id); }
+        }
+        ct.updatedAt = Date.now(); persist();
+        var y2 = $('#page-detail').scrollTop; renderDetail(ct.id); $('#page-detail').scrollTop = y2; toast(msg); return;
+      }
+      if ((el = t.closest('[data-copy-summary]'))) {
+        e.preventDefault(); var cc = getOrder(el.dataset.copySummary); if (!cc) return;
+        var txt = confirmText(cc);
+        (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function () { toast('Message copied – paste it into Messages'); }, function () { toast('Could not copy – press and hold the text to select it'); });
+        return;
+      }
       if ((el = t.closest('[data-ics]'))) { var o = getOrder(el.dataset.ics); if (o) exportICS([o], icsName(o)); return; }
       if ((el = t.closest('[data-icsfile]'))) { e.preventDefault(); var of = getOrder(el.dataset.icsfile); if (of) shareOrDownload(icsName(of), ICS.buildICS([of]), 'text/calendar'); return; }
       if ((el = t.closest('[data-status]'))) {
@@ -846,6 +993,7 @@
     $('#exportIcsUpcoming').onclick = function () { var today = iso(new Date()); exportICS(state.orders.filter(function (o) { return o.dueDate >= today && !isClosed(o); }), 'cake-orders-upcoming.ics'); };
     $('#exportIcsAll').onclick = function () { exportICS(state.orders.filter(function (o) { return o.dueDate; }), 'cake-orders-all.ics'); };
     $('#exportJson').onclick = exportJSON;
+    $('#signatureInput').onchange = function (e) { state.settings.signature = e.target.value.trim(); persistSettings(); toast(state.settings.signature ? 'Texts will say “This is ' + state.settings.signature + '”' : 'Texts won’t include a name'); };
     $('#importJson').onchange = function (e) { if (e.target.files[0]) importJSON(e.target.files[0]); e.target.value = ''; };
     $('#wipeAll').onclick = function () {
       if (!state.orders.length) { toast('Nothing to delete'); return; }
@@ -880,13 +1028,17 @@
     if (res[1]) state.settings = Object.assign(state.settings, res[1]);
     if (!state.settings.notified) state.settings.notified = {};
     if (!Array.isArray(state.settings.defaultReminders)) state.settings.defaultReminders = DEFAULT_REMINDERS.slice();
-    return migrateLegacyPhotos(state.orders).then(function (changed) { return changed ? persist() : null; }).catch(function () {});
+    var typed = ordersLoaded && migrateProductTypes(state.orders);
+    return migrateLegacyPhotos(state.orders).then(function (changed) { return changed || typed ? persist() : null; }).catch(function () {});
   }).then(function () {
     bind(); route(); checkReminders();
     Push.init({
       kvGet: Store.kvGet, kvSet: Store.kvSet,
       getOrders: function () { return state.orders; }, getOrder: getOrder, remindersFor: pushRemindersFor,
       onState: function () { if (!$('#view-settings').hidden) renderNotifCard(); }
+    }).then(function () {
+      // v6 reminder titles name the product ("2 dozen cupcakes for …"): refresh what the server has once.
+      if (state.settings.pushTitles !== 2) { Push.fullSync(); state.settings.pushTitles = 2; persistSettings(); }
     });
     if (ordersLoaded) sweepOrphanPhotos(); // never sweep if orders could not be read
     document.documentElement.classList.add('ready');
@@ -908,5 +1060,5 @@
     });
     navigator.serviceWorker.addEventListener('message', function (e) { if (e.data && e.data.url) location.hash = e.data.url; });
   }
-  window.CakeApp = { store: Store, photos: PH, push: Push, pushRemindersFor: pushRemindersFor, state: state, persist: persist, route: route, buildICS: function () { return ICS.buildICS(state.orders); } };
+  window.CakeApp = { products: PR, confirmText: confirmText, store: Store, photos: PH, push: Push, pushRemindersFor: pushRemindersFor, state: state, persist: persist, route: route, buildICS: function () { return ICS.buildICS(state.orders); } };
 })();

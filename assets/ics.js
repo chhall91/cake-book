@@ -1,6 +1,7 @@
 /* Cake Book – iCalendar (.ics) builder with VALARM reminders. Browser (window.CakeICS) + Node. */
 (function (root) {
   'use strict';
+  var PR = (typeof module !== 'undefined' && module.exports) ? require('./products.js') : root.CakeProducts;
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function parseLocal(dateStr, timeStr) {
     var d = dateStr.split('-').map(Number);
@@ -46,13 +47,13 @@
     var lines = [
       'Customer: ' + (o.name || '') + (o.phone ? ' · ' + o.phone : '') + (o.email ? ' · ' + o.email : ''),
       (o.fulfillment === 'delivery' ? 'DELIVERY' + (o.address ? ' to ' + o.address : '') : 'Pickup'),
-      o.occasion && 'Occasion: ' + o.occasion,
-      (o.size || o.tiers || o.shape) && 'Size: ' + [o.size, o.tiers ? o.tiers + ' tier' : '', o.shape, o.servings ? 'serves ' + o.servings : ''].filter(Boolean).join(', '),
-      o.flavor && 'Flavor: ' + o.flavor, o.filling && 'Filling: ' + o.filling, o.frosting && 'Frosting: ' + o.frosting,
-      o.design && 'Design: ' + o.design, o.message && 'Message: "' + o.message + '"', o.allergies && '⚠ Allergies: ' + o.allergies,
+      'Order: ' + PR.productPhrase(o),
+      o.occasion && 'Occasion: ' + o.occasion
+    ].concat(PR.specRows(o).map(function (r) { return r[0] + ': ' + r[1]; }), [
+      o.allergies && '⚠ Allergies: ' + o.allergies,
       o.price !== '' && o.price != null && ('Price: ' + money(o.price) + (o.deposit ? ' · Deposit: ' + money(o.deposit) : '') + ' · Balance due: ' + money(bal)),
-      'Status: ' + (o.status || ''), o.customerNotes && 'Notes: ' + o.customerNotes
-    ];
+      'Status: ' + (o.status || '') + (o.customerConfirmedAt ? ' (customer confirmed)' : ''), o.customerNotes && 'Notes: ' + o.customerNotes
+    ]);
     return lines.filter(Boolean).join('\n');
   }
 
@@ -66,14 +67,16 @@
       var end = new Date(start.getTime() + 60 * 60000);
       L.push('DTSTART:' + fmtLocal(start), 'DTEND:' + fmtLocal(end));
     }
-    var title = '🎂 ' + (o.fulfillment === 'delivery' ? 'Deliver' : 'Pickup') + ': ' + (o.name || 'Cake') + (o.occasion ? ' – ' + o.occasion : '');
+    // e.g. "🧁 Pickup: 2 dozen cupcakes for Jane Doe – Baby shower", "🎂 Deliver: Wedding cake for Maria Garcia"
+    var cake = PR.typeOf(o) === 'cake', what = PR.productPhrase(o) + ' for ' + (o.name || 'customer') + (!cake && o.occasion ? ' – ' + o.occasion : '');
+    var title = PR.info(o).emoji + ' ' + (o.fulfillment === 'delivery' ? 'Deliver' : 'Pickup') + ': ' + what;
     L.push('SUMMARY:' + esc(title), 'DESCRIPTION:' + esc(describe(o)));
     if (o.fulfillment === 'delivery' && o.address) L.push('LOCATION:' + esc(o.address));
     L.push('STATUS:' + (o.status === 'Inquiry' ? 'TENTATIVE' : 'CONFIRMED'));
     if (o.updatedAt) L.push('LAST-MODIFIED:' + fmtUTC(new Date(o.updatedAt)));
     (o.reminders || []).forEach(function (rem) {
       var mins = (wall(start) - wall(reminderDate(o, rem))) / 60000; // wall-clock minutes before start (DST-safe); negative = after start
-      var label = (+rem.days === 0 ? 'Today' : rem.days + (+rem.days === 1 ? ' day' : ' days') + ' until') + ': ' + (o.name || 'cake') + "'s " + (o.occasion ? o.occasion.toLowerCase() + ' ' : '') + 'cake';
+      var label = (+rem.days === 0 ? 'Today' : rem.days + (+rem.days === 1 ? ' day' : ' days') + ' until') + ': ' + what;
       L.push('BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + esc(label), 'TRIGGER:' + duration(-mins), 'END:VALARM');
     });
     L.push('END:VEVENT');
