@@ -27,7 +27,7 @@
   <main id="main">
     <!-- UPCOMING -->
     <section class="view" id="view-upcoming" data-title="Cake Book">
-      <button class="talk-btn" data-go="#/voice"><span class="talk-mic">🎤</span><span><b>Talk to add an order</b><small>Cake, cupcakes or cream pies – say it all, I'll fill in the form</small></span></button>
+      <button class="talk-btn" data-go="#/voice"><span class="talk-mic">🎤</span><span><b>Talk to Cake Book</b><small>Say a new order – or a change, like “make Jane 3 dozen” or “move the Smith cake to Saturday”</small></span></button>
       <div class="two-btn"><button class="btn secondary" data-go="#/new">⌨️ Type an order</button><button class="btn secondary" data-new-bulk>👥 Bulk order</button></div>
       <div class="chips type-chips" id="typeChips" role="toolbar" aria-label="Show"></div>
       <div id="upcomingList"></div>
@@ -107,22 +107,25 @@
   <section class="page" id="page-detail" hidden></section>
 
   <section class="page" id="page-voice" hidden>
-    <div class="page-head"><button class="icon-btn" data-back>‹ Back</button><h2>Talk to add an order</h2><span></span></div>
+    <div class="page-head"><button class="icon-btn" data-back>‹ Back</button><h2>Talk to Cake Book</h2><span></span></div>
     <div class="page-body">
-      <p class="muted center" id="voiceHint">Tap the microphone and say the whole order, e.g.<br><i>“Sarah Johnson, 555-123-4567, birthday cake for Saturday October 10th at 2pm, chocolate with strawberry filling, 8 inch two tier, pink buttercream, says Happy 6th Birthday Emma, pickup, $85, $20 deposit.”</i><br><br>
+      <div class="voice-scope" id="voiceScope" hidden></div>
+      <p class="muted center" id="voiceHint">Tap the microphone and say a <b>new order</b> – or a <b>change</b>, like <i>“make Jane 3 dozen”</i>, <i>“Bob paid Venmo”</i> or <i>“move the Smith cake to Saturday at 2”</i>.<br><br>A new order, e.g.<br><i>“Sarah Johnson, 555-123-4567, birthday cake for Saturday October 10th at 2pm, chocolate with strawberry filling, 8 inch two tier, pink buttercream, says Happy 6th Birthday Emma, pickup, $85, $20 deposit.”</i><br><br>
         or <i>“Jane Doe, two dozen chocolate cupcakes with vanilla buttercream, Friday at 11…”</i> or <i>“three dozen mini oatmeal cream pies, individually wrapped…”</i></p>
       <div class="big-mic-wrap">
         <button class="big-mic" id="bigMic" aria-label="Start talking">🎤</button>
         <div class="mic-status" id="micStatus">Tap to start</div>
       </div>
       <div class="unsupported" id="voiceUnsupported" hidden>
-        <b>Voice typing tip:</b> this browser can't listen directly. Tap in the box below and press the <b>🎤 microphone key on your keyboard</b> to dictate, then tap “Fill in the order”.
+        <b>Voice typing tip:</b> this browser can't listen directly. Tap in the box below and press the <b>🎤 microphone key on your keyboard</b> to dictate, then tap “Go”.
       </div>
       <label class="field-label" for="transcript">What you said (you can fix it here)</label>
       <textarea id="transcript" rows="6" placeholder="Your words will appear here…"></textarea>
       <div class="interim" id="interim"></div>
-      <button class="btn block big" id="parseBtn">✨ Fill in the order</button>
-      <button class="btn link" id="clearTranscript">Clear</button>
+      <button class="btn block big" id="parseBtn">✨ Go</button>
+      <div class="two-btn voice-links"><button class="btn link" id="clearTranscript">Clear</button><button class="btn link" id="voiceHelpBtn" aria-expanded="false">💡 What can I say?</button></div>
+      <div id="voiceResult" class="voice-result" aria-live="polite"></div>
+      <div id="voiceHelp" class="card voice-help" hidden></div>
     </div>
   </section>
 
@@ -134,7 +137,7 @@
   <nav class="tabbar" aria-label="Main">
     <a href="#/upcoming" data-tab="upcoming"><span>🗓️</span>Upcoming</a>
     <a href="#/calendar" data-tab="calendar"><span>📆</span>Calendar</a>
-    <a href="#/voice" class="tab-mic" aria-label="Talk to add an order"><span>🎤</span></a>
+    <a href="#/voice" class="tab-mic" aria-label="Talk to Cake Book"><span>🎤</span></a>
     <a href="#/orders" data-tab="orders"><span>🔎</span>Orders</a>
     <a href="#/settings" data-tab="settings"><span>⚙️</span>More</a>
   </nav>
@@ -142,10 +145,12 @@
   <div class="sheet-wrap" id="sheetWrap" hidden><div class="sheet-backdrop" data-sheet-close></div><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="undoBar" class="undo-bar" role="status" aria-live="polite" hidden><span id="undoMsg"></span><button id="undoBtn" type="button">Undo</button></div>
 
   <script src="assets/config.js"></script>
   <script src="assets/parser.js"></script>
   <script src="assets/products.js"></script>
+  <script src="assets/commands.js"></script>
   <script src="assets/ics.js"></script>
   <script src="assets/photos.js"></script>
   <script src="assets/push.js"></script>

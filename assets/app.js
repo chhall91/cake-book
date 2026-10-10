@@ -4,7 +4,7 @@
   var P = window.CakeParser, ICS = window.CakeICS, PR = window.CakeProducts;
 
   // ---------- constants ----------
-  var STATUSES = ['Inquiry', 'Confirmed', 'In progress', 'Ready', 'Delivered/Picked up', 'Paid'];
+  var STATUSES = ['Inquiry', 'Confirmed', 'In progress', 'Ready', 'Delivered/Picked up', 'Paid', 'Cancelled'];
   var DEFAULT_REMINDERS = [{ days: 3, time: '09:00' }, { days: 0, time: '08:00' }];
   var OCCASION_LIST = ['Birthday', 'Wedding', 'Anniversary', 'Baby shower', 'Bridal shower', 'Gender reveal', 'Graduation', 'Retirement', 'Christening', 'Baptism', 'Holiday', 'Just because'];
   var FLAVOR_LIST = ['Vanilla', 'Chocolate', 'Red velvet', 'Lemon', 'Strawberry', 'Funfetti', 'Carrot', 'Marble', 'Almond', 'Coconut', 'Salted caramel', 'Cookies & cream'];
@@ -84,9 +84,9 @@
   function fmtDate(s, opts) { return s ? parseISO(s).toLocaleDateString([], opts || { weekday: 'short', month: 'short', day: 'numeric' }) : 'No date'; }
   function money(n) { if (n === '' || n == null || isNaN(n)) return '—'; return '$' + Number(n).toFixed(2).replace(/\.00$/, ''); }
   function balance(o) { return o.status === 'Paid' ? 0 : Math.max((+o.price || 0) - (+o.deposit || 0), 0); }
-  function isClosed(o) { return o.status === 'Delivered/Picked up' || o.status === 'Paid'; }
+  function isClosed(o) { return o.status === 'Delivered/Picked up' || o.status === 'Paid' || o.status === 'Cancelled'; }
   function isPast(o) { return o.dueDate && parseISO(o.dueDate) < startOfDay(new Date()); }
-  function isDone(o) { return o.status === 'Delivered/Picked up' || (o.status === 'Paid' && isPast(o)); }
+  function isDone(o) { return o.status === 'Delivered/Picked up' || o.status === 'Cancelled' || (o.status === 'Paid' && isPast(o)); }
   function statusClass(s) { return 'st-' + String(s || '').replace(/[^A-Za-z]+/g, '-'); }
   function relDay(s) {
     if (!s) return '';
@@ -233,7 +233,7 @@
     if (parts[0] === 'order' && parts[1]) page = renderDetail(parts[1]);
     else if (parts[0] === 'edit' && parts[1]) page = renderForm(getOrder(parts[1]), false);
     else if (parts[0] === 'new') { page = renderForm(pendingDraft, !!(pendingDraft && pendingDraft.transcript)); pendingDraft = null; }
-    else if (parts[0] === 'voice') page = renderVoice();
+    else if (parts[0] === 'voice') page = renderVoice((/[?&]order=([^&]+)/.exec(h) || [])[1] || null);
     if (page) { page.hidden = false; page.scrollTop = 0; document.body.classList.add('page-open'); return; }
     var tab = ['upcoming', 'calendar', 'orders', 'settings'].indexOf(parts[0]) >= 0 ? parts[0] : 'upcoming';
     $$('.view').forEach(function (v) { v.hidden = v.id !== 'view-' + tab; });
@@ -406,7 +406,8 @@
       (IS_IOS ? ' <a href="#" data-icsfile="' + esc(o.id) + '">Trouble? Save the file instead</a>' : '') + '</p></div>' +
       (o.transcript ? '<details class="card transcript-details"><summary>🎤 What was said</summary><p><i>' + esc(o.transcript) + '</i></p></details>' : '') +
       '<p class="muted small center">Added ' + esc(new Date(o.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) + '</p>' +
-      '<button class="btn danger block" data-delete="' + esc(o.id) + '">Delete order</button></div>';
+      '<button class="btn danger block" data-delete="' + esc(o.id) + '">Delete order</button></div>' +
+      '<a class="voice-fab" href="#/voice?order=' + esc(o.id) + '" aria-label="Change this order by talking"><span>🎤</span><small>Talk</small></a>';
     PH.hydrate(page);
     if (PR.isBulk(o)) renderPeople(o);
     return page;
@@ -962,12 +963,106 @@
   // Each recognition "session" rewrites its own text from event.results (robust against iOS duplicate/cumulative results);
   // when Safari ends a session after a pause we commit and restart while the user is still in listening mode.
   var bigRec = null, bigListening = false;
-  function renderVoice() {
+  function renderVoice(scopeId) {
     var page = $('#page-voice');
     $('#voiceUnsupported').hidden = !!SR;
     $('#bigMic').hidden = !SR; $('#micStatus').hidden = !SR;
     $('#micStatus').textContent = 'Tap to start';
+    voiceScopeId = scopeId && getOrder(scopeId) ? scopeId : null;
+    drawScope(); $('#voiceResult').innerHTML = ''; showVoiceHelp(false); $('#undoBar').hidden = true;
     return page;
+  }
+
+  // ---------- voice commands (v8): "make Jane 3 dozen", "move the Smith cake to Saturday", "show unpaid" ----------
+  var C = window.CakeCommands, voiceScopeId = null, voicePending = null, lastUndo = null, undoTimer = null;
+  function drawScope() {
+    var o = voiceScopeId && getOrder(voiceScopeId), el = $('#voiceScope');
+    el.hidden = !o;
+    el.innerHTML = o ? '<span>' + orderEmoji(o) + ' About <b>' + esc(o.name || 'this order') + '</b>' + (PR.isBulk(o) ? ' · ' + PR.bulkTotals(o).people + ' people' : '') + '</span><button type="button" data-scope-clear aria-label="Not about this order">✕</button>' : '';
+  }
+  function showVoiceHelp(on) {
+    var h = $('#voiceHelp');
+    if (on && !h.innerHTML) h.innerHTML = '<h3>💡 Things you can say</h3>' + C.EXAMPLES.map(function (g) {
+      return '<h4>' + esc(g[0]) + '</h4><div class="vc-examples">' + g[1].map(function (x) { return '<button type="button" class="vc-ex" data-vc-example="' + esc(x) + '">“' + esc(x) + '”</button>'; }).join('') + '</div>';
+    }).join('') + '<p class="muted small">Numbers can be words (“three dozen”, “half a dozen”, “a couple”). Names don’t have to be perfect. Nothing changes until you tap <b>Apply</b>, and you can always <b>Undo</b>.</p>';
+    h.hidden = !on; $('#voiceHelpBtn').setAttribute('aria-expanded', on ? 'true' : 'false');
+  }
+  function newOrderFrom(text) {
+    var draft = P.parseOrder(text);
+    delete draft._rest;
+    draft.transcript = text;
+    pendingDraft = draft;
+    location.hash = '#/new?voice=1';
+  }
+  function scrollToResult() { var pg = $('#page-voice'), box = $('#voiceResult'); if (box.firstChild) pg.scrollTop = Math.max(0, box.offsetTop - 70); }
+  function runVoice(text, choice) {
+    var r = C.interpret(text, { orders: state.orders, currentId: voiceScopeId, now: new Date() }, choice);
+    voicePending = { text: text, r: r };
+    var box = $('#voiceResult');
+    switch (r.kind) {
+      case 'new': newOrderFrom(r.text || text); return;
+      case 'undo': box.innerHTML = ''; doUndo(); return;
+      case 'help': box.innerHTML = ''; showVoiceHelp(true); $('#page-voice').scrollTop = $('#voiceHelp').offsetTop - 70; return;
+      case 'nav':
+        if (r.peopleFilter || r.personId) { var po = getOrder(r.orderId); peopleView = { id: r.orderId, filter: r.peopleFilter || 'all', sort: 'name', q: r.personId && po ? ((getPerson(po, r.personId) || {}).name || '') : '' }; }
+        $('#transcript').value = ''; location.hash = '#/order/' + r.orderId; return;
+      case 'plan': box.innerHTML = planHTML(r); break;
+      case 'pick': box.innerHTML = '<div class="card vc-card vc-pick"><div class="vc-head">🤔 <b>' + esc(r.why || 'Which one?') + '</b></div>' +
+        r.options.map(function (op, i) { return '<button type="button" class="vc-option" data-vc-pick="' + i + '"><b>' + esc(op.label) + '</b><small>' + esc(op.sub || '') + '</small></button>'; }).join('') +
+        '<button type="button" class="btn link block" data-vc-cancel>Cancel</button></div>'; break;
+      case 'list': {
+        var list = r.ids.map(getOrder).filter(Boolean);
+        box.innerHTML = '<div class="vc-list"><h3>' + esc(r.title) + ' <span class="count">' + list.length + '</span></h3>' + (list.length ? list.map(function (o) { return cardHTML(o, { showDate: true }); }).join('') : '<p class="muted center">Nothing here 🎉</p>') + '</div>';
+        break;
+      }
+      case 'nochange': box.innerHTML = '<div class="card vc-card"><p>👍 ' + esc(r.msg) + '</p></div>'; break;
+      case 'error': box.innerHTML = '<div class="card vc-card vc-error"><p>🤔 ' + esc(r.msg) + '</p>' + exampleChips(3) + '</div>'; break;
+      default:
+        box.innerHTML = '<div class="card vc-card vc-error"><p><b>🙉 I didn’t catch that.</b>' + (r.msg ? '<br>' + esc(r.msg) : r.empty ? '' : '<br>Try one of these, or tap <b>💡 What can I say?</b>') + '</p>' + exampleChips(4) +
+          (r.empty ? '' : '<button type="button" class="btn secondary block" data-vc-neworder>📝 Make it a new order instead</button>') + '</div>';
+    }
+    scrollToResult();
+  }
+  function exampleChips(n) {
+    var ex = ['Make Jane 3 dozen', 'Jane paid Venmo', 'Move the Smith cake to Saturday at 2', 'Show unpaid', 'Change the frosting to cream cheese', 'What’s due this week?'];
+    return '<div class="vc-examples">' + ex.slice(0, n).map(function (x) { return '<button type="button" class="vc-ex" data-vc-example="' + esc(x) + '">“' + esc(x) + '”</button>'; }).join('') + '</div>';
+  }
+  function planHTML(r) {
+    return '<div class="card vc-card vc-plan" id="vcPlan"><div class="vc-head">✏️ <b>' + esc(r.title) + '</b></div>' +
+      (r.title.indexOf(r.orderName) < 0 ? '<div class="vc-order">' + esc(r.orderName || '') + '</div>' : '') +
+      '<ul class="vc-diff">' + r.rows.map(function (row) {
+        return '<li class="' + (row.total ? 'total' : row.added ? 'added' : row.removed ? 'removed' : '') + '"><b>' + esc(row.label) + '</b> ' + row.segs.map(function (sg) {
+          return '<span class="seg">' + (sg[2] ? esc(sg[2]) : '') + '<span class="from">' + esc(sg[0]) + '</span> → <span class="to">' + esc(sg[1]) + '</span></span>';
+        }).join('<span class="sep">, </span>') + '</li>';
+      }).join('') + '</ul>' +
+      (r.warnings || []).map(function (w) { return '<p class="vc-warn">⚠️ ' + esc(w) + '</p>'; }).join('') +
+      (r.note ? '<p class="small muted">' + esc(r.note) + '</p>' : '') +
+      (r.dateChanged ? '<p class="small muted">🔔 Reminders move with it. If you added this order to your iPhone Calendar, tap 📅 on the order again afterwards.</p>' : '') +
+      '<div class="two-btn"><button type="button" class="btn secondary" data-vc-cancel>Cancel</button><button type="button" class="btn" data-vc-apply>✓ Apply</button></div></div>';
+  }
+  function applyPlan(r) {
+    var cur = getOrder(r.orderId);
+    if (!cur) { toast('That order is gone'); return; }
+    var before = JSON.parse(JSON.stringify(cur));
+    state.orders = state.orders.map(function (o) { return o.id === r.orderId ? r.next : o; });
+    persist(); Push.markDirty(r.orderId);
+    lastUndo = { id: r.orderId, before: before, summary: r.summary };
+    $('#transcript').value = ''; $('#voiceResult').innerHTML = ''; voicePending = null;
+    if (voiceScopeId === r.orderId && navCount > 0) history.back(); else location.replace('#/order/' + r.orderId);
+    var um = r.rows.some(function (x) { return x.segs.length && !x.total && /^(Date|Time|Status|Price|Deposit|Balance due|Notes|Pickup \/ delivery|Address|Quantity|Customer confirmed|Flavor|Frosting|Filling|Size|Tiers|Phone)$/.test(x.label); }) ? (r.orderName || 'Order') + ' – ' + r.summary : r.summary;
+    showUndo('✓ ' + (um.length > 110 ? um.slice(0, 108) + '…' : um));
+  }
+  function showUndo(msg) {
+    var bar = $('#undoBar'); $('#undoMsg').textContent = msg; bar.hidden = false; bar.classList.add('above-fab');
+    clearTimeout(undoTimer); undoTimer = setTimeout(function () { bar.hidden = true; }, 12000);
+  }
+  function doUndo() {
+    $('#undoBar').hidden = true; clearTimeout(undoTimer);
+    if (!lastUndo) { toast('Nothing to undo'); return; }
+    var u = lastUndo; lastUndo = null;
+    if (getOrder(u.id)) state.orders = state.orders.map(function (o) { return o.id === u.id ? u.before : o; }); else state.orders.push(u.before);
+    persist(); Push.markDirty(u.id);
+    route(); toast('Undone ↩︎');
   }
   function startBigMic() {
     var btn = $('#bigMic'), ta = $('#transcript');
@@ -1353,13 +1448,20 @@
     $('#parseBtn').onclick = function () {
       if (bigListening) stopBigMic();
       var text = $('#transcript').value.trim();
-      if (!text) { toast('Say or type the order first'); return; }
-      var draft = P.parseOrder(text);
-      delete draft._rest;
-      draft.transcript = text;
-      pendingDraft = draft;
-      location.hash = '#/new?voice=1';
+      if (!text) { toast('Say or type something first'); return; }
+      runVoice(text);
     };
+    $('#voiceHelpBtn').onclick = function () { showVoiceHelp($('#voiceHelp').hidden); if (!$('#voiceHelp').hidden) $('#page-voice').scrollTop = $('#voiceHelp').offsetTop - 70; };
+    $('#undoBtn').onclick = doUndo;
+    $('#page-voice').addEventListener('click', function (e) {
+      var b;
+      if ((b = e.target.closest('[data-vc-apply]'))) { if (voicePending && voicePending.r.kind === 'plan') applyPlan(voicePending.r); return; }
+      if ((b = e.target.closest('[data-vc-cancel]'))) { $('#voiceResult').innerHTML = ''; voicePending = null; toast('Nothing changed'); return; }
+      if ((b = e.target.closest('[data-vc-pick]'))) { var op = voicePending && voicePending.r.options[+b.dataset.vcPick]; if (op) runVoice(voicePending.text, op.choice); return; }
+      if ((b = e.target.closest('[data-vc-example]'))) { $('#transcript').value = b.dataset.vcExample.replace(/’/g, "'"); $('#voiceResult').innerHTML = ''; $('#page-voice').scrollTop = 0; $('#transcript').focus(); return; }
+      if ((b = e.target.closest('[data-vc-neworder]'))) { newOrderFrom(voicePending ? voicePending.text : $('#transcript').value.trim()); return; }
+      if ((b = e.target.closest('[data-scope-clear]'))) { voiceScopeId = null; drawScope(); return; }
+    });
     document.addEventListener('visibilitychange', function () { if (!document.hidden) { checkReminders(); if (!document.body.classList.contains('page-open') && !$('#view-upcoming').hidden) renderBanner(); } });
     setInterval(checkReminders, 60000);
     var deferred = null;

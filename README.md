@@ -72,3 +72,28 @@ Real push reminders come from the **cake-push** Cloudflare Worker (`/workspace/c
   (only totals go to the push server – never the people's names or numbers; the .ics description holds the full list on the phone).
 - Tests: `node tests/bulk-parser.test.js`, `node tests/products.test.js`, `node tests/v7-bulk-e2e.js` (needs the :8765 server;
   screenshots 10a–10g), `node tests/upgrade-v7-test.js` (v6 snapshot in /tmp/live-v6 → v7, own server on :8770).
+
+
+## Talk to Cake Book – voice changes – v8
+
+The main mic (Upcoming → **🎤 Talk to Cake Book**, the 🎤 tab, or the round **🎤 Talk** button on any order page) now understands *changes* as well as new orders. Everything is rule-based and runs on the phone – no AI service, no internet needed for the understanding part (`assets/commands.js`).
+
+**How it works**
+1. Say (or type) something and tap **✨ Go**.
+2. A whole new order (“Sarah Johnson, 555-…, birthday cake for Saturday…”) goes to the filled-in form exactly as before.
+3. A change shows a **confirm card** with every before → after, e.g. *Jane Doe: 1 dozen → 3 dozen, owes $12 → $36* plus the order totals. Nothing is saved until you tap **Apply**; **Cancel** leaves everything alone.
+4. After Apply you land on the order with an **Undo** bar for 12 seconds (or say “undo” later).
+
+**Who/which order** – names are matched loosely (Jayne/Jane, Katie/Katy, Steven/Stephen…). Opened from an order’s 🎤 button, commands are about *that order* first (shown as “About Smith Family Fundraiser ✕”). If it could be two people or orders (“make Jane 3 dozen” with a Jane in two bulk orders) you get a **pick list**. If nothing matches you get a friendly “I couldn’t find …”.
+
+**Things you can say** (also under **💡 What can I say?**)
+- Bulk people: “make Jane 3 dozen”, “instead of Jane only getting one dozen make it 3 dozen”, “change Jane from one dozen to 3”, “Jane wants 2 more dozen”, “take a dozen off Bob”, “add Mike Brown 2 dozen to the Smith fundraiser”, “put Sue down for half a dozen”, “remove Amy” / “Amy dropped out”, “Jane paid Venmo”, “Mike paid 15 dollars” (part payment), “Bob hasn’t paid”, “Tom picked up”, “change Bob’s number to 555-201-0009”, “add a note for Jane that she’ll be late”.
+- Orders: “move the Smith cake to Saturday at 2”, “pickup is now at 4pm”, “mark the Garcia cake ready / confirmed / in progress”, “cancel the Garcia order” (status **Cancelled** – kept, reminders stop), “change the frosting to cream cheese”, “make it chocolate”, “make it a 10 inch”, “the price is 90”, “deposit paid 20”, “change the price per dozen to 14” (bulk), “make it 3 dozen” (cupcakes / cream pies), “make it a delivery to 12 Oak Street”, “switch it to pickup”, “add a note that she’s allergic to nuts”, “Sarah confirmed” (customer-confirmed badge).
+- Find: “open Jane’s order”, “show unpaid” (inside a bulk order this filters the people list), “who hasn’t picked up”, “what’s due this week / tomorrow / Saturday / next week”, “show me the cupcake orders”.
+- Numbers can be words: “three dozen”, “half a dozen”, “a dozen and a half”, “two and a half”, “a couple”, “another dozen”.
+
+Date/time changes re-sync push reminders automatically (same path as editing the form). Calendar (.ics) events already added to the iPhone Calendar can’t be changed from the web – the card reminds you to tap 📅 again.
+
+New status: **Cancelled** (in the status picker too) – counts as closed, so no reminders and hidden from Upcoming.
+
+**Tests**: `tests/commands.test.js` (94 phrases + resolution/diff cases + every older new-order sentence still routes to the form), `tests/v8-voice-e2e.js` (WebKit iPhone: apply, undo, cancel, pick list, scope, reschedule + reminders, queries, help, unknown), `tests/upgrade-v8-test.js` (real v7 → v8 with data, photos, settings). Screenshots `screenshots/11*.png`.
