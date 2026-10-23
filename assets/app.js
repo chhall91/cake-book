@@ -1551,7 +1551,11 @@
       // v6 reminder titles name the product ("2 dozen cupcakes for …"): refresh what the server has once.
       if (state.settings.pushTitles !== 2) { Push.fullSync(); state.settings.pushTitles = 2; persistSettings(); }
     });
-    Confirm.init({ kvGet: Store.kvGet, kvSet: Store.kvSet, apply: applyConfirmResponses });
+    Confirm.init({ kvGet: Store.kvGet, kvSet: Store.kvSet, apply: applyConfirmResponses }).then(function () {
+      // links become available once the Worker identity is loaded: refresh an open order so its text includes the link
+      var h = location.hash.split('/');
+      if (h[1] === 'order' && getOrder(h[2]) && Confirm.available()) { var pg = $('#page-detail'), y = pg.scrollTop; renderDetail(h[2]); pg.scrollTop = y; }
+    });
     if (ordersLoaded) sweepOrphanPhotos(); // never sweep if orders could not be read
     document.documentElement.classList.add('ready');
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
