@@ -67,6 +67,7 @@
   var state = { orders: [], settings: { defaultReminders: DEFAULT_REMINDERS.slice(), notified: {} } };
   function persist() { return DB.set('orders', state.orders); }
   var Push = window.CakePush;
+  var Confirm = window.CakeConfirm;
   function persistSettings() { return DB.set('settings', state.settings); }
 
   // ---------- utils ----------
@@ -105,13 +106,15 @@
   function orderEmoji(o) { return PR.typeOf(o) === 'cake' ? occasionEmoji(o) : PR.info(o).emoji; }
   function typePill(o) { var t = PR.typeOf(o), ti = PR.TYPES[t]; return '<span class="pill type-pill tp-' + t + '">' + ti.emoji + ' ' + esc(t === 'cake' ? 'Cake' : ti.plural) + '</span>'; }
   // Customer-confirmation state: 'confirmed' | 'changed' (details edited after the customer confirmed) | 'sent' | ''
+  function changeReq(o) { return o.changeRequest && (!o.customerConfirmedAt || o.changeRequest.at > o.customerConfirmedAt) ? o.changeRequest : null; }
   function confirmState(o) {
+    if (changeReq(o)) return 'change';
     if (o.customerConfirmedAt) return o.confirmedSig && o.confirmedSig !== PR.confirmSig(o) ? 'changed' : 'confirmed';
     return o.confirmSentAt ? 'sent' : '';
   }
   function confirmPill(o) {
     var c = confirmState(o);
-    return c === 'confirmed' ? '<span class="pill ok">✅ Customer confirmed</span>' : c === 'changed' ? '<span class="pill warn">✏️ Changed since confirmed</span>' : c === 'sent' ? '<span class="pill plain">💬 Waiting for reply</span>' : '';
+    return c === 'change' ? '<span class="pill warn change-pill">✏️ Change requested</span>' : c === 'confirmed' ? '<span class="pill ok">✅ Customer confirmed</span>' : c === 'changed' ? '<span class="pill warn">✏️ Changed since confirmed</span>' : c === 'sent' ? '<span class="pill plain">💬 Waiting for reply</span>' : '';
   }
   function telHref(p) { return 'tel:' + String(p || '').replace(/[^\d+]/g, ''); }
   function smsHref(p) { return 'sms:' + String(p || '').replace(/[^\d+]/g, ''); }
@@ -468,10 +471,11 @@
     return '<div class="person ps-' + m.state + (p.pickedUp ? ' picked' : '') + '">' +
       '<button class="p-main" data-person-edit="' + esc(p.id) + '" aria-label="Edit ' + esc(p.name || 'person') + '">' +
       '<span class="p-top"><span class="p-name">' + esc(p.name || p.phone || 'No name') + '</span><span class="p-amt">' + amt + '</span></span>' +
-      '<span class="p-sub">' + esc([PR.dz(p.dozen), p.flavor, p.note ? '📝 ' + p.note : ''].filter(Boolean).join(' · ')) + '</span></button>' +
+      '<span class="p-sub">' + esc([PR.dz(p.dozen), p.flavor, p.note ? '📝 ' + p.note : ''].filter(Boolean).join(' · ')) + '</span>' +
+      (changeReq(p) ? '<span class="p-confirm warn">✏️ Change requested: “' + esc(changeReq(p).note) + '”</span>' : p.customerConfirmedAt ? '<span class="p-confirm ok">✅ Confirmed</span>' : '') + '</button>' +
       '<div class="p-actions"><button class="p-pay" data-person-pay="' + esc(p.id) + '">' + payLbl + '</button>' +
       '<button class="p-pick" data-person-pick="' + esc(p.id) + '" aria-pressed="' + !!p.pickedUp + '">' + (p.pickedUp ? '📦 Picked up ✓' : '📦 Not picked up') + '</button>' +
-      (p.phone ? '<a class="p-text" href="' + esc(PR.smsLink(p.phone, PR.personText(o, p, textOpts()), IS_IOS)) + '" data-person-text="' + esc(p.id) + '" aria-label="Text ' + esc(p.name) + '">💬</a>' : '') +
+      (p.phone ? '<a class="p-text" href="' + esc(PR.smsLink(p.phone, personLinkText(o, p), IS_IOS)) + '" data-person-text="' + esc(p.id) + '" aria-label="Text ' + esc(p.name) + '">💬</a>' : '') +
       '</div></div>';
   }
   function bulkChanged(o, msg) {
@@ -723,18 +727,71 @@
     return '<div class="card product-card"><h3>' + (PR.isBulk(o) ? PR.info(o).emoji + ' Bulk ' + PR.info(o).label.toLowerCase() : PR.info(o).detail) + '</h3>' + msg + '<dl class="kv">' + rows + '</dl></div>';
   }
   function confirmText(o) { return PR.summaryText(o, { signature: state.settings.signature, payInfo: state.settings.payInfo }); }
+  // v9: same text plus the customer's confirm link (falls back to the plain text when offline / Worker unavailable)
+  function confirmLinkText(o) {
+    var txt = confirmText(o), url = Confirm.linkFor(o.id, '');
+    if (!url) return txt;
+    return txt.replace(/\nPlease reply YES to confirm everything looks right, or let me know any changes\. Thank you!$/, '') +
+      '\nPlease tap to confirm everything looks right or ask for a change:\n' + url + '\nThank you!';
+  }
+  function personLinkText(o, p) {
+    var txt = PR.personText(o, p, textOpts()), url = Confirm.linkFor(o.id, p.id);
+    return url ? txt.replace(/\nThank you!$/, '') + '\nPlease tap to confirm or ask for a change:\n' + url + '\nThank you!' : txt;
+  }
+  /** What the customer page shows (built from the same text, so it always matches the SMS). */
+  function pageSummary(o, text, person) {
+    var lines = text.split('\n'), out = { name: person ? person.name : (PR.isBulk(o) ? (o.organizer || o.name) : o.name), baker: state.settings.signature || '', details: [], product: '', when: '', price: '' };
+    lines.slice(1).forEach(function (l) {
+      l = l.trim();
+      if (!l || /^Please (reply|tap)|^Thank you!$|^https?:/.test(l)) return;
+      var m;
+      if ((m = /^(Pickup|Delivery)(?::| is) (.*?)\.?$/.exec(l)) && !out.when) { out.when = m[1] + ': ' + m[2]; return; }
+      if ((m = /^(Total|Amount due|Still due): (.*?)\.?$/.exec(l)) && !out.price) { out.price = m[2]; return; }
+      if (!out.product) { out.product = l.replace(/^Your order: /, '').replace(/\.$/, ''); return; }
+      out.details.push(l);
+    });
+    if (!out.product) out.product = PR.info(o).label || 'Your order';
+    return out;
+  }
+  function applyConfirmResponses(list) {
+    var touched = {}, msgs = [];
+    list.forEach(function (r) {
+      var o = getOrder(r.orderId); if (!o) return;
+      var target = r.personId ? getPerson(o, r.personId) : o; if (!target) return;
+      var who = String((r.personId ? target.name : o.name) || 'Customer').trim().split(/\s+/)[0];
+      if (r.status === 'confirmed') {
+        if (target.customerConfirmedAt && target.customerConfirmedAt >= r.respondedAt) return;
+        target.customerConfirmedAt = r.respondedAt; target.confirmedVia = 'link'; delete target.changeRequest;
+        if (!r.personId) { o.confirmedSig = PR.confirmSig(o); if (o.status === 'Inquiry') { o.status = 'Confirmed'; Push.markDirty(o.id); } }
+        msgs.push('✅ ' + who + ' confirmed');
+      } else if (r.status === 'change') {
+        if (target.changeRequest && target.changeRequest.at >= r.respondedAt) return;
+        target.changeRequest = { note: r.note, at: r.respondedAt };
+        msgs.push('✏️ ' + who + ' requested a change');
+      } else return;
+      o.updatedAt = Date.now(); touched[o.id] = 1;
+    });
+    if (!Object.keys(touched).length) return;
+    persist();
+    var h = location.hash.split('/');
+    if (h[1] === 'order' && touched[h[2]]) { var pg = $('#page-detail'), y = pg.scrollTop; renderDetail(h[2]); pg.scrollTop = y; }
+    else if (!$('#view-upcoming').hidden) renderUpcoming();
+    toast(msgs.join(' · '), 4000);
+  }
   function confirmCardHTML(o) {
     if (!o.phone) return '';
     var c = confirmState(o), when = function (t) { return new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); };
-    var line = c === 'confirmed' ? '✅ Customer confirmed ' + esc(when(o.customerConfirmedAt))
+    var cr = changeReq(o);
+    var line = c === 'change' ? '✏️ <b>Change requested</b> ' + esc(when(cr.at)) + ':</p><p class="change-note">“' + esc(cr.note) + '”</p><p class="small muted">Update the order, then text them again.'
+      : c === 'confirmed' ? '✅ Customer confirmed ' + esc(when(o.customerConfirmedAt)) + (o.confirmedVia === 'link' ? ' (via the link)' : '')
       : c === 'changed' ? '✏️ You changed this order after the customer confirmed (' + esc(when(o.customerConfirmedAt)) + '). Text them the new details.'
       : c === 'sent' ? '💬 Confirmation text opened ' + esc(when(o.confirmSentAt)) + ' – waiting for their reply.'
       : 'Text the customer a summary so they can check everything is right.';
-    return '<div class="card confirm-card' + (c === 'confirmed' ? ' is-confirmed' : '') + '"><h3>💬 Customer confirmation</h3><p class="small confirm-line">' + line + '</p>' +
-      '<a class="btn block big confirm-send" href="' + esc(PR.smsLink(o.phone, confirmText(o), IS_IOS)) + '" data-confirm-send="' + esc(o.id) + '">💬 Text for confirmation</a>' +
+    return '<div class="card confirm-card' + (c === 'confirmed' ? ' is-confirmed' : c === 'change' ? ' is-change' : '') + '"><h3>💬 Customer confirmation</h3><p class="small confirm-line">' + line + '</p>' +
+      '<a class="btn block big confirm-send" href="' + esc(PR.smsLink(o.phone, confirmLinkText(o), IS_IOS)) + '" data-confirm-send="' + esc(o.id) + '">💬 Text for confirmation</a>' +
       '<button class="btn block ' + (c === 'confirmed' ? 'ok-btn' : 'secondary') + '" data-confirm-toggle="' + esc(o.id) + '" aria-pressed="' + (c === 'confirmed') + '">' +
       (c === 'confirmed' ? '✅ Customer confirmed (tap to undo)' : '👍 Mark customer confirmed') + '</button>' +
-      '<details class="msg-preview"><summary>Preview the message</summary><pre class="sms-preview">' + esc(confirmText(o)) + '</pre>' +
+      '<details class="msg-preview"><summary>Preview the message</summary><pre class="sms-preview">' + esc(confirmLinkText(o)) + '</pre>' +
       '<button class="btn link small-btn" data-copy-summary="' + esc(o.id) + '">Copy text</button></details></div>';
   }
 
@@ -1364,7 +1421,10 @@
           bulkChanged(bo, pk.pickedUp ? (pk.name || 'Person') + ' picked up ✓' + (left ? '' : ' – that’s everyone 🎉') : (pk.name || 'Person') + ' not picked up');
           return;
         }
-        if ((el = t.closest('[data-person-text]'))) { var ptx = getPerson(bo, el.dataset.personText); if (ptx) { ptx.textedAt = Date.now(); bo.updatedAt = Date.now(); persist(); } return; }
+        if ((el = t.closest('[data-person-text]'))) { var ptx = getPerson(bo, el.dataset.personText); if (ptx) {
+          ptx.textedAt = Date.now(); delete ptx.changeRequest; bo.updatedAt = Date.now(); persist();
+          if (/\/c\//.test(decodeURIComponent(el.getAttribute('href')))) Confirm.sent(bo.id, ptx.id, pageSummary(bo, PR.personText(bo, ptx, textOpts()), ptx), bo.dueDate);
+        } return; }
         if ((el = t.closest('[data-walk]'))) { walkSheet(bo, el.dataset.walk); return; }
         if ((el = t.closest('[data-share-list]'))) { shareSheet(bo); return; }
         if ((el = t.closest('[data-bulk-more]'))) { moreSheet(bo); return; }
@@ -1375,7 +1435,8 @@
       if ((el = t.closest('[data-confirm-send]'))) {
         // the link itself opens Messages with the summary filled in; we just note when it was sent
         var cs = getOrder(el.dataset.confirmSend); if (!cs) return;
-        if (confirmState(cs) === 'changed') { delete cs.customerConfirmedAt; delete cs.confirmedSig; }
+        if (confirmState(cs) === 'changed' || confirmState(cs) === 'change') { delete cs.customerConfirmedAt; delete cs.confirmedSig; delete cs.changeRequest; }
+        if (Confirm.linkFor(cs.id, '') && /\/c\//.test(decodeURIComponent(el.getAttribute('href')))) Confirm.sent(cs.id, '', pageSummary(cs, confirmText(cs)), cs.dueDate);
         cs.confirmSentAt = Date.now(); cs.updatedAt = Date.now(); persist();
         setTimeout(function () { if (location.hash === '#/order/' + cs.id) { var y = $('#page-detail').scrollTop; renderDetail(cs.id); $('#page-detail').scrollTop = y; } }, 600);
         return;
@@ -1383,9 +1444,9 @@
       if ((el = t.closest('[data-confirm-toggle]'))) {
         var ct = getOrder(el.dataset.confirmToggle); if (!ct) return;
         var msg;
-        if (confirmState(ct) === 'confirmed') { delete ct.customerConfirmedAt; delete ct.confirmedSig; msg = 'Marked as not confirmed yet'; }
+        if (confirmState(ct) === 'confirmed') { delete ct.customerConfirmedAt; delete ct.confirmedSig; delete ct.confirmedVia; msg = 'Marked as not confirmed yet'; }
         else {
-          ct.customerConfirmedAt = Date.now(); ct.confirmedSig = PR.confirmSig(ct); msg = 'Customer confirmed ✅';
+          ct.customerConfirmedAt = Date.now(); ct.confirmedSig = PR.confirmSig(ct); delete ct.changeRequest; delete ct.confirmedVia; msg = 'Customer confirmed ✅';
           if (ct.status === 'Inquiry') { ct.status = 'Confirmed'; msg += ' · Status: Confirmed'; Push.markDirty(ct.id); }
         }
         ct.updatedAt = Date.now(); persist();
@@ -1393,7 +1454,8 @@
       }
       if ((el = t.closest('[data-copy-summary]'))) {
         e.preventDefault(); var cc = getOrder(el.dataset.copySummary); if (!cc) return;
-        var txt = confirmText(cc);
+        var txt = confirmLinkText(cc);
+        if (/\/c\//.test(txt)) Confirm.sent(cc.id, '', pageSummary(cc, confirmText(cc)), cc.dueDate);
         (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function () { toast('Message copied – paste it into Messages'); }, function () { toast('Could not copy – press and hold the text to select it'); });
         return;
       }
@@ -1406,7 +1468,7 @@
       if ((el = t.closest('[data-delete]'))) {
         var del = getOrder(el.dataset.delete);
         if (del && confirm('Delete the order for ' + (del.name || 'this customer') + '? This cannot be undone.')) {
-          state.orders = state.orders.filter(function (x) { return x.id !== del.id; }); persist(); Push.markDirty(del.id); deleteOrderPhotos(del); toast('Order deleted'); location.replace('#/upcoming');
+          state.orders = state.orders.filter(function (x) { return x.id !== del.id; }); persist(); Push.markDirty(del.id); Confirm.forget(del.id); deleteOrderPhotos(del); toast('Order deleted'); location.replace('#/upcoming');
         }
       }
     });
@@ -1489,6 +1551,7 @@
       // v6 reminder titles name the product ("2 dozen cupcakes for …"): refresh what the server has once.
       if (state.settings.pushTitles !== 2) { Push.fullSync(); state.settings.pushTitles = 2; persistSettings(); }
     });
+    Confirm.init({ kvGet: Store.kvGet, kvSet: Store.kvSet, apply: applyConfirmResponses });
     if (ordersLoaded) sweepOrphanPhotos(); // never sweep if orders could not be read
     document.documentElement.classList.add('ready');
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
@@ -1509,5 +1572,5 @@
     });
     navigator.serviceWorker.addEventListener('message', function (e) { if (e.data && e.data.url) location.hash = e.data.url; });
   }
-  window.CakeApp = { closeSheet: closeSheet, products: PR, confirmText: confirmText, store: Store, photos: PH, push: Push, pushRemindersFor: pushRemindersFor, state: state, persist: persist, route: route, buildICS: function () { return ICS.buildICS(state.orders); } };
+  window.CakeApp = { closeSheet: closeSheet, products: PR, confirmText: confirmText, confirmLinkText: confirmLinkText, confirm: Confirm, store: Store, photos: PH, push: Push, pushRemindersFor: pushRemindersFor, state: state, persist: persist, route: route, buildICS: function () { return ICS.buildICS(state.orders); } };
 })();

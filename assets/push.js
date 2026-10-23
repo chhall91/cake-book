@@ -56,6 +56,9 @@
 
   // ---- enable / disable ----
   function register(sub) {
+    // v9: reuse the confirm-link identity (if any) so customer links and reminders live on the same Worker device
+    var cc = !creds && window.CakeConfirm && window.CakeConfirm.ownCreds && window.CakeConfirm.ownCreds();
+    if (cc) creds = { deviceId: cc.deviceId, secret: cc.secret, enabledAt: Date.now() };
     var body = { subscription: sub.toJSON ? sub.toJSON() : sub };
     return request('POST', '/subscribe', body).catch(function (e) {
       if (e.code === 'unauthorized' && creds) { creds = null; return request('POST', '/subscribe', body); }
@@ -178,6 +181,7 @@
 
   window.CakePush = {
     init: init, status: status, enable: enable, disable: disable, sendTest: sendTest,
+    creds: function () { return creds && creds.deviceId ? { deviceId: creds.deviceId, secret: creds.secret } : null; },
     markDirty: markDirty, fullSync: fullSync, flush: flush,
     isOn: function () { return status() === 'on'; },
     pendingCount: pendingCount, lastError: function () { return lastError; }, apiBase: apiBase
