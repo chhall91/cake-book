@@ -3,6 +3,7 @@
    The token is made once, so the link never changes; every save republishes. */
 (function () {
   'use strict';
+  var DISCLAIMER = 'Prices are estimates and may go up depending on design, size and ingredient costs.';
   var deps = null, data = null, timer = null, publishing = null;
   var TYPES = [{ type: 'cake', label: 'Cakes', emoji: '🎂' }, { type: 'cupcakes', label: 'Cupcakes', emoji: '🧁' }, { type: 'creampies', label: 'Oatmeal cream pies', emoji: '🍪' }];
   function ex(name, price, note) { return { id: rid(), name: name, price: price, note: note, example: true }; }
@@ -124,8 +125,8 @@
     clearTimeout(timer);
     publish().then(function (u) {
       renderStatus(); btn.disabled = false; btn.textContent = '📤 Share price list';
-      var text = 'Here are my prices: ' + u;
-      if (navigator.share) navigator.share({ title: title(), text: 'Here are my prices:', url: u }).catch(function () {});
+      var text = 'Here are my prices: ' + u + '\n' + DISCLAIMER;
+      if (navigator.share) navigator.share({ title: title(), text: 'Here are my prices:\n' + DISCLAIMER, url: u }).catch(function () {});
       else location.href = 'sms:?&body=' + encodeURIComponent(text);
     }, function (e) {
       renderStatus(); btn.disabled = false; btn.textContent = '📤 Share price list';
@@ -141,5 +142,5 @@
       setTimeout(retryIfDirty, 3000);
     });
   }
-  window.CakePrices = { init: init, render: render, publish: publish, url: url, hasExamples: hasExamples, data: function () { return data; } };
+  window.CakePrices = { DISCLAIMER: DISCLAIMER, init: init, render: render, publish: publish, url: url, hasExamples: hasExamples, data: function () { return data; } };
 })();

@@ -731,7 +731,7 @@
   // v9: same text plus the customer's confirm link (falls back to the plain text when offline / Worker unavailable)
   function priceTail() {
     var u = state.settings.priceLinkInText && window.CakePrices && CakePrices.url();
-    return u ? '\nMy price list: ' + u : '';
+    return u ? '\nMy price list: ' + u + '\n' + CakePrices.DISCLAIMER : '';
   }
   function confirmLinkText(o) {
     var txt = confirmText(o) + priceTail(), url = Confirm.linkFor(o.id, '');
