@@ -105,5 +105,5 @@
       return poll();
     }).catch(function (e) { console.warn('confirm init', e); });
   }
-  window.CakeConfirm = { init: init, poll: poll, linkFor: linkFor, sent: sent, forget: forget, available: available, creds: function () { return myCreds(); }, ownCreds: function () { return creds; } };
+  window.CakeConfirm = { init: init, ensureCreds: ensureCreds, poll: poll, linkFor: linkFor, sent: sent, forget: forget, available: available, creds: function () { return myCreds(); }, ownCreds: function () { return creds; } };
 })();

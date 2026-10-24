@@ -236,6 +236,7 @@
     if (parts[0] === 'order' && parts[1]) page = renderDetail(parts[1]);
     else if (parts[0] === 'edit' && parts[1]) page = renderForm(getOrder(parts[1]), false);
     else if (parts[0] === 'new') { page = renderForm(pendingDraft, !!(pendingDraft && pendingDraft.transcript)); pendingDraft = null; }
+    else if (parts[0] === 'prices' && window.CakePrices && CakePrices.data()) page = CakePrices.render();
     else if (parts[0] === 'voice') page = renderVoice((/[?&]order=([^&]+)/.exec(h) || [])[1] || null);
     if (page) { page.hidden = false; page.scrollTop = 0; document.body.classList.add('page-open'); return; }
     var tab = ['upcoming', 'calendar', 'orders', 'settings'].indexOf(parts[0]) >= 0 ? parts[0] : 'upcoming';
@@ -728,11 +729,16 @@
   }
   function confirmText(o) { return PR.summaryText(o, { signature: state.settings.signature, payInfo: state.settings.payInfo }); }
   // v9: same text plus the customer's confirm link (falls back to the plain text when offline / Worker unavailable)
+  function priceTail() {
+    var u = state.settings.priceLinkInText && window.CakePrices && CakePrices.url();
+    return u ? '\nMy price list: ' + u : '';
+  }
   function confirmLinkText(o) {
-    var txt = confirmText(o), url = Confirm.linkFor(o.id, '');
+    var txt = confirmText(o) + priceTail(), url = Confirm.linkFor(o.id, '');
     if (!url) return txt;
+    txt = confirmText(o);
     return txt.replace(/\nPlease reply YES to confirm everything looks right, or let me know any changes\. Thank you!$/, '') +
-      '\nPlease tap to confirm everything looks right or ask for a change:\n' + url + '\nThank you!';
+      '\nPlease tap to confirm everything looks right or ask for a change:\n' + url + '\nThank you!' + priceTail();
   }
   function personLinkText(o, p) {
     var txt = PR.personText(o, p, textOpts()), url = Confirm.linkFor(o.id, p.id);
@@ -1245,6 +1251,7 @@
     renderNotifCard();
     $('#signatureInput').value = state.settings.signature || '';
     $('#payInfoInput').value = state.settings.payInfo || '';
+    $('#priceLinkInText').checked = !!state.settings.priceLinkInText;
     var ed = reminderEditor($('#defaultReminders'), state.settings.defaultReminders, persistSettings);
     $('#addDefaultReminder').onclick = function () { ed.add(); };
     var n = state.orders.length, base = n + ' order' + (n === 1 ? '' : 's') + ' saved on this device.';
@@ -1497,6 +1504,10 @@
     $('#exportIcsAll').onclick = function () { exportICS(state.orders.filter(function (o) { return o.dueDate; }), 'cake-orders-all.ics'); };
     $('#exportJson').onclick = exportJSON;
     $('#payInfoInput').onchange = function (e) { state.settings.payInfo = e.target.value.trim(); persistSettings(); toast(state.settings.payInfo ? 'Saved – texts will say “You can pay with ' + state.settings.payInfo + '”' : 'Payment info removed'); };
+    $('#priceLinkInText').onchange = function (e) {
+      state.settings.priceLinkInText = e.target.checked; persistSettings();
+      toast(!e.target.checked ? 'Price list link removed from texts' : (window.CakePrices && CakePrices.url() ? 'Confirmation texts will include your price list link' : 'Share your price list once first – then texts will include it'), 3500);
+    };
     $('#signatureInput').onchange = function (e) { state.settings.signature = e.target.value.trim(); persistSettings(); toast(state.settings.signature ? 'Texts will say “This is ' + state.settings.signature + '”' : 'Texts won’t include a name'); };
     $('#importJson').onchange = function (e) { if (e.target.files[0]) importJSON(e.target.files[0]); e.target.value = ''; };
     $('#wipeAll').onclick = function () {
@@ -1551,6 +1562,8 @@
       // v6 reminder titles name the product ("2 dozen cupcakes for …"): refresh what the server has once.
       if (state.settings.pushTitles !== 2) { Push.fullSync(); state.settings.pushTitles = 2; persistSettings(); }
     });
+    if (window.CakePrices) CakePrices.init({ kvGet: Store.kvGet, kvSet: Store.kvSet, esc: esc, toast: toast, settings: function () { return state.settings; } })
+      .then(function () { if (/^#\/prices/.test(location.hash)) route(); });
     Confirm.init({ kvGet: Store.kvGet, kvSet: Store.kvSet, apply: applyConfirmResponses }).then(function () {
       // links become available once the Worker identity is loaded: refresh an open order so its text includes the link
       var h = location.hash.split('/');

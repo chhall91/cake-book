@@ -73,11 +73,17 @@
         <button class="btn secondary small-btn" id="addDefaultReminder">＋ Add reminder</button>
       </div>
       <div class="card">
+        <h3>💲 Price list</h3>
+        <p class="muted small">Rough prices for cakes, cupcakes and oatmeal cream pies on a nice page you can text to anyone. The link never changes, and always shows your latest prices.</p>
+        <a class="btn block" href="#/prices">Edit &amp; share price list</a>
+      </div>
+      <div class="card">
         <h3>💬 Confirmation texts</h3>
         <label class="field-label" for="signatureInput">Your name or bakery name (optional)</label>
         <input type="text" id="signatureInput" class="text-input" placeholder="e.g. Kim’s Cakes" autocapitalize="words" maxlength="60">
         <label class="field-label" for="payInfoInput">How people can pay (optional)</label>
         <input type="text" id="payInfoInput" class="text-input" placeholder="e.g. Venmo @KimsCakes or cash" maxlength="100">
+        <label class="toggle-row"><input type="checkbox" id="priceLinkInText"> Add my price list link to confirmation texts</label>
         <p class="muted small">Each order has a <b>Text for confirmation</b> button. It opens Messages with the order details already typed out, starting “Hi Sarah! This is <i>your name</i>.” You just tap send. When money is still owed, texts add “You can pay with …”.</p>
       </div>
       <div class="card">
@@ -105,6 +111,8 @@
 
   <!-- Full-screen pages -->
   <section class="page" id="page-detail" hidden></section>
+
+  <section class="page" id="page-prices" hidden></section>
 
   <section class="page" id="page-voice" hidden>
     <div class="page-head"><button class="icon-btn" data-back>‹ Back</button><h2>Talk to Cake Book</h2><span></span></div>
@@ -155,6 +163,7 @@
   <script src="assets/photos.js"></script>
   <script src="assets/push.js"></script>
   <script src="assets/confirm.js"></script>
+  <script src="assets/prices.js"></script>
   <script src="assets/app.js"></script>
 </body>
 </html>

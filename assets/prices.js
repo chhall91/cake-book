@@ -1,0 +1,140 @@
+/* Cake Book v10 – shareable price list.
+   Edited in the app (#/prices), stored on the phone, and published to the cake-push Worker as a public page /p/<token>.
+   The token is made once, so the link never changes; every save republishes. */
+(function () {
+  'use strict';
+  var deps = null, data = null, timer = null, publishing = null;
+  var TYPES = [{ type: 'cake', label: 'Cakes', emoji: '🎂' }, { type: 'cupcakes', label: 'Cupcakes', emoji: '🧁' }, { type: 'creampies', label: 'Oatmeal cream pies', emoji: '🍪' }];
+  function ex(name, price, note) { return { id: rid(), name: name, price: price, note: note, example: true }; }
+  function rid() { return Math.random().toString(36).slice(2, 10); }
+  function seed() {
+    return {
+      v: 1, title: '', intro: 'Prices are estimates – your final quote depends on size, design and details. Text me to order!', contact: '',
+      groups: [
+        { type: 'cake', label: 'Cakes', items: [ex('6" round cake', 'from $45', 'Serves 8–12'), ex('8" round cake', 'from $60', 'Serves 16–20'), ex('2-tier cake', 'from $150', 'Serves about 40'), ex('Quarter sheet cake', '$55–70', 'Serves about 24')] },
+        { type: 'cupcakes', label: 'Cupcakes', items: [ex('Classic cupcakes', '$30', 'Per dozen'), ex('Custom decorated cupcakes', '$36–45', 'Per dozen'), ex('Mini cupcakes', '$18', 'Per dozen')] },
+        { type: 'creampies', label: 'Oatmeal cream pies', items: [ex('Oatmeal cream pies', '$24', 'Per dozen'), ex('Mini oatmeal cream pies', '$15', 'Per dozen'), ex('Individually wrapped', '+$3', 'Per dozen')] }
+      ],
+      token: null, publishedAt: 0, dirty: false, exampleIntro: true
+    };
+  }
+  function base() { return window.CakePush ? window.CakePush.apiBase() : String((window.CAKE_CONFIG || {}).pushApi || '').replace(/\/+$/, ''); }
+  function save() { return deps.kvSet('priceList', data); }
+  function hasExamples() { return data.groups.some(function (g) { return g.items.some(function (i) { return i.example; }); }); }
+  function url() { return data.token ? base() + '/p/' + data.token : ''; }
+  function title() { return data.title || ((deps.settings().signature || '').trim() ? deps.settings().signature.trim() + ' – Prices' : 'Cake & Treat Prices'); }
+  function payload() {
+    return { title: title(), intro: data.intro, contact: data.contact,
+      groups: data.groups.map(function (g) { return { type: g.type, label: g.label, items: g.items.map(function (i) { return { name: i.name, price: i.price, note: i.note }; }) }; }) };
+  }
+  function token() {
+    var b = new Uint8Array(18); crypto.getRandomValues(b);
+    return btoa(String.fromCharCode.apply(null, b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  /** Publish the current list (creates the link the first time). Resolves with the URL. */
+  function publish() {
+    if (publishing) return publishing.then(function () { return data.dirty ? publish() : url(); });
+    if (!base()) return Promise.reject(new Error('No server configured'));
+    if (!data.token) { data.token = token(); }
+    data.dirty = true; save();
+    publishing = window.CakeConfirm.ensureCreds().then(function (c) {
+      if (!c) throw new Error('offline');
+      var snap = JSON.stringify(payload());
+      return fetch(base() + '/prices', { method: 'PUT', cache: 'no-store', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + c.deviceId + '.' + c.secret },
+        body: JSON.stringify({ token: data.token, list: JSON.parse(snap) }) }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status); });
+      }).then(function () { if (JSON.stringify(payload()) === snap) data.dirty = false; data.publishedAt = Date.now(); return save(); });
+    }).then(function () { publishing = null; return url(); }, function (e) { publishing = null; throw e; });
+    return publishing;
+  }
+  /** Saved an edit: republish shortly if the list has already been shared. */
+  function changed() {
+    data.dirty = true; save();
+    clearTimeout(timer);
+    if (data.token) timer = setTimeout(function () { publish().then(function () { renderStatus(); }, function () { renderStatus(); }); }, 800);
+  }
+  function retryIfDirty() { if (data && data.token && data.dirty && navigator.onLine !== false) publish().catch(function () {}); }
+
+  // ---------- UI ----------
+  var esc = function (s) { return deps.esc(s); };
+  function itemRow(g, i) {
+    return '<div class="pl-item' + (i.example ? ' is-example' : '') + '" data-gi="' + g + '" data-id="' + esc(i.id) + '">' +
+      '<div class="pl-row"><input class="text-input pl-name" data-f="name" value="' + esc(i.name) + '" placeholder="Item (e.g. 8&quot; round)" maxlength="80" aria-label="Item name">' +
+      '<input class="text-input pl-price" data-f="price" value="' + esc(i.price) + '" placeholder="from $40" maxlength="40" aria-label="Price" inputmode="text"></div>' +
+      '<div class="pl-row"><input class="text-input pl-note" data-f="note" value="' + esc(i.note) + '" placeholder="Note (optional) – e.g. per dozen, serves 12" maxlength="140" aria-label="Note">' +
+      '<button class="icon-btn pl-del" type="button" data-pl-del aria-label="Remove ' + esc(i.name || 'item') + '">🗑</button></div>' +
+      (i.example ? '<span class="pl-ex">EXAMPLE – replace with your price</span>' : '') + '</div>';
+  }
+  function render() {
+    var page = document.getElementById('page-prices');
+    var groups = data.groups.map(function (g, gi) {
+      var t = TYPES.filter(function (x) { return x.type === g.type; })[0] || { emoji: '✨' };
+      return '<div class="card pl-group"><h3>' + t.emoji + ' ' + esc(g.label) + '</h3>' + g.items.map(function (i) { return itemRow(gi, i); }).join('') +
+        '<button class="btn secondary small-btn" type="button" data-pl-add="' + gi + '">＋ Add ' + esc(g.label.toLowerCase()) + ' item</button></div>';
+    }).join('');
+    page.innerHTML = '<div class="page-head"><button class="icon-btn" data-back>‹ Back</button><h2>Price list</h2><span></span></div><div class="page-body">' +
+      (hasExamples() || data.exampleIntro ? '<div class="pl-banner" id="plBanner">⚠️ <b>These are example prices.</b> Replace them with your real prices before you share. Items marked EXAMPLE haven’t been changed yet – tap one to edit it, or 🗑 to remove it.</div>' : '') +
+      '<div class="card pl-share"><button class="btn block big" type="button" id="plShare">📤 Share price list</button>' +
+      '<p class="muted small" id="plStatus"></p><a class="btn link" id="plPreview" target="_blank" rel="noopener" hidden>👀 Preview what customers see</a></div>' +
+      '<div class="card"><label class="field-label" for="plTitle">Title</label><input class="text-input" id="plTitle" maxlength="80" placeholder="' + esc(title()) + '" value="' + esc(data.title) + '">' +
+      '<label class="field-label" for="plIntro" style="margin-top:10px">Note at the top</label><textarea class="text-input" id="plIntro" rows="3" maxlength="600">' + esc(data.intro) + '</textarea>' +
+      '<label class="field-label" for="plContact" style="margin-top:10px">How to order (optional)</label><input class="text-input" id="plContact" maxlength="120" placeholder="e.g. Text 555-123-4567 to order" value="' + esc(data.contact) + '"></div>' +
+      groups + '<p class="muted small center">Changes save automatically. Once shared, your link stays the same and always shows your latest prices.</p></div>';
+    renderStatus();
+    page.oninput = function (e) {
+      var t = e.target, row = t.closest('.pl-item');
+      if (t.id === 'plTitle') data.title = t.value; else if (t.id === 'plIntro') { data.intro = t.value; data.exampleIntro = false; } else if (t.id === 'plContact') data.contact = t.value;
+      else if (row) {
+        var it = find(row); if (!it) return; it[t.dataset.f] = t.value;
+        if (it.example) { it.example = false; row.classList.remove('is-example'); var x = row.querySelector('.pl-ex'); if (x) x.remove(); }
+      }
+      if (!hasExamples()) { data.exampleIntro = false; var b = document.getElementById('plBanner'); if (b) b.remove(); }
+      changed();
+    };
+    page.onclick = function (e) {
+      var t = e.target, el;
+      if ((el = t.closest('[data-pl-del]'))) {
+        var row = el.closest('.pl-item'), g = data.groups[+row.dataset.gi];
+        g.items = g.items.filter(function (i) { return i.id !== row.dataset.id; }); changed(); keep(render); return;
+      }
+      if ((el = t.closest('[data-pl-add]'))) {
+        var it = { id: rid(), name: '', price: '', note: '' }; data.groups[+el.dataset.plAdd].items.push(it); save(); keep(render);
+        var inp = page.querySelector('[data-id="' + it.id + '"] .pl-name'); if (inp) inp.focus(); return;
+      }
+      if (t.closest('#plShare')) { share(); }
+    };
+    return page;
+  }
+  function keep(fn) { var p = document.getElementById('page-prices'), y = p.scrollTop; fn(); p.scrollTop = y; }
+  function find(row) { var g = data.groups[+row.dataset.gi]; return g && g.items.filter(function (i) { return i.id === row.dataset.id; })[0]; }
+  function renderStatus() {
+    var el = document.getElementById('plStatus'), pv = document.getElementById('plPreview'); if (!el) return;
+    if (!data.token) { el.textContent = 'Not shared yet. Tap Share to get a link you can text to customers.'; pv.hidden = true; return; }
+    el.innerHTML = (data.dirty ? '⏳ Saving changes to your link…' : '✅ Your link is up to date.') + '<br><span class="pl-url">' + esc(url()) + '</span>';
+    pv.href = url(); pv.hidden = false;
+  }
+  function share() {
+    if (hasExamples() && !confirm('Some prices are still EXAMPLES. Share anyway?')) return;
+    var btn = document.getElementById('plShare'); btn.disabled = true; btn.textContent = '⏳ Getting your link…';
+    clearTimeout(timer);
+    publish().then(function (u) {
+      renderStatus(); btn.disabled = false; btn.textContent = '📤 Share price list';
+      var text = 'Here are my prices: ' + u;
+      if (navigator.share) navigator.share({ title: title(), text: 'Here are my prices:', url: u }).catch(function () {});
+      else location.href = 'sms:?&body=' + encodeURIComponent(text);
+    }, function (e) {
+      renderStatus(); btn.disabled = false; btn.textContent = '📤 Share price list';
+      deps.toast(navigator.onLine === false ? 'You’re offline – connect to the internet and try again.' : 'Couldn’t publish the price list (' + e.message + '). Try again in a minute.', 5000);
+    });
+  }
+  function init(d) {
+    deps = d;
+    return deps.kvGet('priceList').then(function (s) {
+      data = s && s.groups ? s : seed();
+      window.addEventListener('online', retryIfDirty);
+      document.addEventListener('visibilitychange', function () { if (!document.hidden) retryIfDirty(); });
+      setTimeout(retryIfDirty, 3000);
+    });
+  }
+  window.CakePrices = { init: init, render: render, publish: publish, url: url, hasExamples: hasExamples, data: function () { return data; } };
+})();
