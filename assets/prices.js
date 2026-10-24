@@ -5,10 +5,14 @@
   'use strict';
   var DISCLAIMER = 'Prices are estimates and may go up depending on design, size and ingredient costs.';
   var deps = null, data = null, timer = null, publishing = null;
-  var TYPES = [{ type: 'cake', label: 'Cakes', emoji: '🎂' }, { type: 'cupcakes', label: 'Cupcakes', emoji: '🧁' }, { type: 'creampies', label: 'Oatmeal cream pies', emoji: '🍪' }];
-  var TAGS = { cake: 'Birthdays, showers & every celebration', cupcakes: 'Perfect for parties & sharing', creampies: 'Soft, chewy, homemade classics' };
+  var TYPES = [{ type: 'cake', label: 'Cakes', emoji: '🎂' }, { type: 'cupcakes', label: 'Cupcakes', emoji: '🧁' }, { type: 'cookies', label: 'Cookies', emoji: '🍪' }, { type: 'creampies', label: 'Oatmeal cream pies', emoji: '🍪' }];
+  var TAGS = { cake: 'Birthdays, showers & every celebration', cupcakes: 'Perfect for parties & sharing', cookies: 'Fresh-baked by the dozen', creampies: 'Soft, chewy, homemade classics' };
   function ex(name, price, note) { return { id: rid(), name: name, price: price, note: note, example: true }; }
   function rid() { return Math.random().toString(36).slice(2, 10); }
+  function cookieGroup() {
+    return { type: 'cookies', label: 'Cookies', items: [ex('Classic cookies', '$18–24', 'Per dozen – chocolate chip, sugar or snickerdoodle'), ex('Decorated sugar cookies', '$36–48', 'Per dozen – custom iced designs'),
+      ex('Gourmet / stuffed cookies', '$30–40', 'Per dozen – big bakery-style'), ex('Mini cookies', '$10–14', 'Per dozen')] };
+  }
   function seed() {
     return {
       v: 1, title: '', intro: 'Prices are estimates – your final quote depends on size, design and details. Text me to order!', contact: '',
@@ -19,6 +23,7 @@
         { type: 'other', label: 'Cake add-ons', items: [ex('Fondant covering', '+$1–2 per serving', 'Instead of buttercream'), ex('Custom cake topper', '+$10–25', 'Name or age topper'),
           ex('Fresh flowers', '+$15–40', 'Depends on flowers'), ex('Filling upgrade', '+$5–15', 'Fruit, ganache, cream cheese, etc.'), ex('Delivery', '$10–25', 'Depends on distance – setup included for tiered cakes')] },
         { type: 'cupcakes', label: 'Cupcakes', items: [ex('Standard cupcakes', '$24–30', 'Per dozen'), ex('Gourmet / filled cupcakes', '$36–45', 'Per dozen'), ex('Mini cupcakes', '$15–20', 'Per dozen'), ex('Custom toppers or decorations', '+$6–12', 'Per dozen')] },
+        cookieGroup(),
         { type: 'creampies', label: 'Oatmeal cream pies', items: [ex('Oatmeal cream pies', '$20–28', 'Per dozen'), ex('Mini oatmeal cream pies', '$12–15', 'Per dozen'), ex('Individually wrapped', '+$3', 'Per dozen'),
           ex('Bulk / fundraiser pricing', '$1.50–2 each', '5+ dozen – ask for a quote')] }
       ],
@@ -142,6 +147,14 @@
     deps = d;
     return deps.kvGet('priceList').then(function (s) {
       data = s && s.groups ? s : seed();
+      // v10.4: lists saved before Cookies existed get the Cookies group (before Oatmeal cream pies)
+      if (!data.cookiesAdded) {
+        if (!data.groups.some(function (g) { return g.type === 'cookies'; })) {
+          var at = data.groups.findIndex(function (g) { return g.type === 'creampies'; });
+          data.groups.splice(at < 0 ? data.groups.length : at, 0, cookieGroup()); if (data.token) data.dirty = true;
+        }
+        data.cookiesAdded = true; save();
+      }
       window.addEventListener('online', retryIfDirty);
       document.addEventListener('visibilitychange', function () { if (!document.hidden) retryIfDirty(); });
       setTimeout(retryIfDirty, 3000);
