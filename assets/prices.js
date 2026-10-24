@@ -6,6 +6,7 @@
   var DISCLAIMER = 'Prices are estimates and may go up depending on design, size and ingredient costs.';
   var deps = null, data = null, timer = null, publishing = null;
   var TYPES = [{ type: 'cake', label: 'Cakes', emoji: '🎂' }, { type: 'cupcakes', label: 'Cupcakes', emoji: '🧁' }, { type: 'creampies', label: 'Oatmeal cream pies', emoji: '🍪' }];
+  var TAGS = { cake: 'Birthdays, showers & every celebration', cupcakes: 'Perfect for parties & sharing', creampies: 'Soft, chewy, homemade classics' };
   function ex(name, price, note) { return { id: rid(), name: name, price: price, note: note, example: true }; }
   function rid() { return Math.random().toString(36).slice(2, 10); }
   function seed() {
@@ -31,7 +32,7 @@
   function title() { return data.title || ((deps.settings().signature || '').trim() ? deps.settings().signature.trim() + ' – Prices' : 'Cake & Treat Prices'); }
   function payload() {
     return { title: title(), intro: data.intro, contact: data.contact,
-      groups: data.groups.map(function (g) { return { type: g.type, label: g.label, items: g.items.map(function (i) { return { name: i.name, price: i.price, note: i.note }; }) }; }) };
+      groups: data.groups.map(function (g) { return { type: g.type, label: g.label, tagline: g.tagline || '', hidden: !!g.hidden, items: g.items.map(function (i) { return { name: i.name, price: i.price, note: i.note }; }) }; }) };
   }
   function token() {
     var b = new Uint8Array(18); crypto.getRandomValues(b);
@@ -75,7 +76,10 @@
     var page = document.getElementById('page-prices');
     var groups = data.groups.map(function (g, gi) {
       var t = TYPES.filter(function (x) { return x.type === g.type; })[0] || { emoji: '✨' };
-      return '<div class="card pl-group"><h3>' + t.emoji + ' ' + esc(g.label) + '</h3>' + g.items.map(function (i) { return itemRow(gi, i); }).join('') +
+      var addon = g.type === 'other';
+      return '<div class="card pl-group' + (g.hidden ? ' is-hidden' : '') + '"><h3>' + t.emoji + ' ' + esc(g.label) + '</h3>' +
+        (addon ? '<p class="muted small">Shown inside the Cakes page.</p>' : '<label class="field-label" for="plTag' + gi + '">Tagline on the menu tile (optional)</label><input class="text-input" id="plTag' + gi + '" data-g="' + gi + '" data-gf="tagline" maxlength="80" placeholder="' + esc(TAGS[g.type] || '') + '" value="' + esc(g.tagline || '') + '">') +
+        '<label class="toggle-row"><input type="checkbox" data-g="' + gi + '" data-gf="hidden"' + (g.hidden ? ' checked' : '') + '> Hide ' + (addon ? 'add-ons' : 'this category') + ' from customers</label>' + g.items.map(function (i) { return itemRow(gi, i); }).join('') +
         '<button class="btn secondary small-btn" type="button" data-pl-add="' + gi + '">＋ Add ' + esc(g.label.toLowerCase()) + ' item</button></div>';
     }).join('');
     page.innerHTML = '<div class="page-head"><button class="icon-btn" data-back>‹ Back</button><h2>Price list</h2><span></span></div><div class="page-body">' +
@@ -90,6 +94,7 @@
     page.oninput = function (e) {
       var t = e.target, row = t.closest('.pl-item');
       if (t.id === 'plTitle') data.title = t.value; else if (t.id === 'plIntro') { data.intro = t.value; data.exampleIntro = false; } else if (t.id === 'plContact') data.contact = t.value;
+      else if (t.dataset.gf) { var gg = data.groups[+t.dataset.g]; if (t.dataset.gf === 'hidden') { gg.hidden = t.checked; t.closest('.pl-group').classList.toggle('is-hidden', t.checked); } else gg.tagline = t.value; changed(); return; }
       else if (row) {
         var it = find(row); if (!it) return; it[t.dataset.f] = t.value;
         if (it.example) { it.example = false; row.classList.remove('is-example'); var x = row.querySelector('.pl-ex'); if (x) x.remove(); }
