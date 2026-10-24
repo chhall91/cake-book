@@ -11,9 +11,14 @@
     return {
       v: 1, title: '', intro: 'Prices are estimates – your final quote depends on size, design and details. Text me to order!', contact: '',
       groups: [
-        { type: 'cake', label: 'Cakes', items: [ex('6" round cake', 'from $45', 'Serves 8–12'), ex('8" round cake', 'from $60', 'Serves 16–20'), ex('2-tier cake', 'from $150', 'Serves about 40'), ex('Quarter sheet cake', '$55–70', 'Serves about 24')] },
-        { type: 'cupcakes', label: 'Cupcakes', items: [ex('Classic cupcakes', '$30', 'Per dozen'), ex('Custom decorated cupcakes', '$36–45', 'Per dozen'), ex('Mini cupcakes', '$18', 'Per dozen')] },
-        { type: 'creampies', label: 'Oatmeal cream pies', items: [ex('Oatmeal cream pies', '$24', 'Per dozen'), ex('Mini oatmeal cream pies', '$15', 'Per dozen'), ex('Individually wrapped', '+$3', 'Per dozen')] }
+        { type: 'cake', label: 'Cakes', items: [ex('6" round cake', '$45–60', 'Serves 8–12'), ex('8" round cake', '$60–80', 'Serves 16–24'), ex('10" round cake', '$85–110', 'Serves 28–38'),
+          ex('2-tier cake', '$150–250', '6" + 8" – serves about 40'), ex('3-tier cake', '$300–450', '6" + 8" + 10" – serves about 75'),
+          ex('Quarter sheet cake', '$50–70', 'Serves about 24'), ex('Half sheet cake', '$90–120', 'Serves about 48'), ex('Smash cake', '$25–35', '4" – perfect for a first birthday')] },
+        { type: 'other', label: 'Cake add-ons', items: [ex('Fondant covering', '+$1–2 per serving', 'Instead of buttercream'), ex('Custom cake topper', '+$10–25', 'Name or age topper'),
+          ex('Fresh flowers', '+$15–40', 'Depends on flowers'), ex('Filling upgrade', '+$5–15', 'Fruit, ganache, cream cheese, etc.'), ex('Delivery', '$10–25', 'Depends on distance – setup included for tiered cakes')] },
+        { type: 'cupcakes', label: 'Cupcakes', items: [ex('Standard cupcakes', '$24–30', 'Per dozen'), ex('Gourmet / filled cupcakes', '$36–45', 'Per dozen'), ex('Mini cupcakes', '$15–20', 'Per dozen'), ex('Custom toppers or decorations', '+$6–12', 'Per dozen')] },
+        { type: 'creampies', label: 'Oatmeal cream pies', items: [ex('Oatmeal cream pies', '$20–28', 'Per dozen'), ex('Mini oatmeal cream pies', '$12–15', 'Per dozen'), ex('Individually wrapped', '+$3', 'Per dozen'),
+          ex('Bulk / fundraiser pricing', '$1.50–2 each', '5+ dozen – ask for a quote')] }
       ],
       token: null, publishedAt: 0, dirty: false, exampleIntro: true
     };
