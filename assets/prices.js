@@ -4,9 +4,26 @@
 (function () {
   'use strict';
   var DISCLAIMER = 'Prices are estimates and may go up depending on design, size and ingredient costs.';
-  var deps = null, data = null, timer = null, publishing = null;
+  var deps = null, busy = {}, data = null, timer = null, publishing = null;
   var TYPES = [{ type: 'cake', label: 'Cakes', emoji: '🎂' }, { type: 'cupcakes', label: 'Cupcakes', emoji: '🧁' }, { type: 'cookies', label: 'Cookies', emoji: '🍪' }, { type: 'creampies', label: 'Oatmeal cream pies', emoji: '🍪' }];
   var TAGS = { cake: 'Birthdays, showers & every celebration', cupcakes: 'Perfect for parties & sharing', cookies: 'Fresh-baked by the dozen', creampies: 'Soft, chewy, homemade classics' };
+  var DEF = { cake: ['cakes', '🎂'], cupcakes: ['cupcakes', '🧁'], cookies: ['cookies', '🍪'], creampies: ['cream-pies', '🥧'], other: ['add-ons', '✨'] };
+  function slugify(t) { return String(t || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'treats'; }
+  function uniqueSlug(base, except) {
+    var s = slugify(base), n = 2, used = data ? data.groups.filter(function (g) { return g !== except; }).map(function (g) { return g.slug; }) : [];
+    if (s === 'menu') s = 'menu-items';
+    var out = s; while (used.indexOf(out) >= 0) out = s + '-' + n++; return out;
+  }
+  /** v10.5: every group gets a stable slug (hash link), an emoji and an addon flag. */
+  function migrate() {
+    var ch = false;
+    data.groups.forEach(function (g) {
+      if (g.addon === undefined) { g.addon = g.type === 'other'; ch = true; }
+      if (!g.emoji) { g.emoji = (DEF[g.type] || DEF.other)[1]; ch = true; }
+      if (!g.slug) { g.slug = uniqueSlug(g.type === 'other' ? slugify(g.label) : (DEF[g.type] || [g.label])[0], g); ch = true; }
+    });
+    return ch;
+  }
   function ex(name, price, note) { return { id: rid(), name: name, price: price, note: note, example: true }; }
   function rid() { return Math.random().toString(36).slice(2, 10); }
   function cookieGroup() {
@@ -37,7 +54,7 @@
   function title() { return data.title || ((deps.settings().signature || '').trim() ? deps.settings().signature.trim() + ' – Prices' : 'Cake & Treat Prices'); }
   function payload() {
     return { title: title(), intro: data.intro, contact: data.contact,
-      groups: data.groups.map(function (g) { return { type: g.type, label: g.label, tagline: g.tagline || '', hidden: !!g.hidden, items: g.items.map(function (i) { return { name: i.name, price: i.price, note: i.note }; }) }; }) };
+      groups: data.groups.map(function (g) { return { type: g.type, slug: g.slug, emoji: g.emoji, addon: !!g.addon, photo: g.photo || '', label: g.label, tagline: g.tagline || '', hidden: !!g.hidden, items: g.items.map(function (i) { return { name: i.name, price: i.price, note: i.note }; }) }; }) };
   }
   function token() {
     var b = new Uint8Array(18); crypto.getRandomValues(b);
@@ -67,6 +84,40 @@
   }
   function retryIfDirty() { if (data && data.token && data.dirty && navigator.onLine !== false) publish().catch(function () {}); }
 
+  // ---------- photos: square-crop to 800px JPEG <= ~150KB on the phone, then upload ----------
+  function loadImage(file) {
+    return new Promise(function (res, rej) { var u = URL.createObjectURL(file), im = new Image(); im.onload = function () { res(im); setTimeout(function () { URL.revokeObjectURL(u); }, 1000); }; im.onerror = function () { rej(new Error('Could not read that photo')); }; im.src = u; });
+  }
+  function squareJpeg(file) {
+    return loadImage(file).then(function (im) {
+      var w = im.naturalWidth, h = im.naturalHeight, side = Math.min(w, h), out = Math.min(800, side);
+      var c = document.createElement('canvas'); c.width = c.height = out;
+      var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, out, out);
+      x.drawImage(im, (w - side) / 2, (h - side) / 2, side, side, 0, 0, out, out);
+      function enc(q, size) {
+        return new Promise(function (r) { c.toBlob(r, 'image/jpeg', q); }).then(function (b) {
+          if (b.size <= 150 * 1024 || q < 0.4) {
+            if (b.size > 150 * 1024 && size > 500) { var c2 = document.createElement('canvas'); c2.width = c2.height = 560; c2.getContext('2d').drawImage(c, 0, 0, 560, 560); c = c2; return enc(0.8, 560); }
+            return b;
+          }
+          return enc(q - 0.1, size);
+        });
+      }
+      return enc(0.85, out);
+    });
+  }
+  function imgUrl(id) { return id ? base() + '/img/' + id + '.jpg' : ''; }
+  function uploadPhoto(g, file) {
+    busy[g.slug] = true; keep(render);
+    return squareJpeg(file).then(function (blob) {
+      return window.CakeConfirm.ensureCreds().then(function (c) {
+        if (!c) throw new Error('offline');
+        return fetch(base() + '/images', { method: 'POST', headers: { 'Content-Type': 'image/jpeg', Authorization: 'Bearer ' + c.deviceId + '.' + c.secret }, body: blob });
+      }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status); return d.id; }); });
+    }).then(function (id) { g.photo = id; delete busy[g.slug]; changed(); keep(render); deps.toast('Photo added ✓'); },
+      function (e) { delete busy[g.slug]; keep(render); deps.toast(navigator.onLine === false ? 'You’re offline – try the photo again when connected.' : 'Couldn’t add the photo (' + e.message + ')', 4500); });
+  }
+
   // ---------- UI ----------
   var esc = function (s) { return deps.esc(s); };
   function itemRow(g, i) {
@@ -79,14 +130,22 @@
   }
   function render() {
     var page = document.getElementById('page-prices');
+    var n = data.groups.length;
     var groups = data.groups.map(function (g, gi) {
-      var t = TYPES.filter(function (x) { return x.type === g.type; })[0] || { emoji: '✨' };
-      var addon = g.type === 'other';
-      return '<div class="card pl-group' + (g.hidden ? ' is-hidden' : '') + '"><h3>' + t.emoji + ' ' + esc(g.label) + '</h3>' +
-        (addon ? '<p class="muted small">Shown inside the Cakes page.</p>' : '<label class="field-label" for="plTag' + gi + '">Tagline on the menu tile (optional)</label><input class="text-input" id="plTag' + gi + '" data-g="' + gi + '" data-gf="tagline" maxlength="80" placeholder="' + esc(TAGS[g.type] || '') + '" value="' + esc(g.tagline || '') + '">') +
+      var addon = !!g.addon, ph = g.photo, slug = esc(g.slug);
+      var head = '<div class="pl-ghead">' + (addon ? '<span class="pl-emoji-static">✨</span>' : '<input class="text-input pl-emoji" data-g="' + gi + '" data-gf="emoji" value="' + esc(g.emoji) + '" maxlength="4" aria-label="Emoji">') +
+        '<input class="text-input pl-gname" data-g="' + gi + '" data-gf="label" value="' + esc(g.label) + '" maxlength="40" aria-label="Category name">' +
+        '<button class="icon-btn" type="button" data-pl-up="' + gi + '"' + (gi ? '' : ' disabled') + ' aria-label="Move up">↑</button>' +
+        '<button class="icon-btn" type="button" data-pl-down="' + gi + '"' + (gi < n - 1 ? '' : ' disabled') + ' aria-label="Move down">↓</button>' +
+        '<button class="icon-btn" type="button" data-pl-gdel="' + gi + '" aria-label="Delete category">🗑</button></div>';
+      var photo = addon ? '' : '<div class="pl-photo">' + (busy[g.slug] ? '<div class="pl-thumb pl-busy">⏳</div>' : ph ? '<img class="pl-thumb" src="' + esc(imgUrl(ph)) + '" alt="">' : '<div class="pl-thumb pl-noimg">' + esc(g.emoji) + '</div>') +
+        '<div class="pl-photo-btns"><label class="btn secondary small-btn">' + (ph ? '🔄 Replace photo' : '📷 Add photo') + '<input type="file" accept="image/*" class="vh" data-pl-photo="' + gi + '"></label>' +
+        (ph ? '<button class="btn link" type="button" data-pl-unphoto="' + gi + '">Remove photo</button>' : '<span class="muted small">Shows on the menu tile</span>') + '</div></div>';
+      return '<div class="card pl-group' + (g.hidden ? ' is-hidden' : '') + (addon ? ' is-addon' : '') + '" data-slug="' + slug + '">' + head +
+        (addon ? '<p class="muted small">Add-ons show inside the category above them.</p>' : photo + '<label class="field-label" for="plTag' + gi + '">Tagline on the menu tile (optional)</label><input class="text-input" id="plTag' + gi + '" data-g="' + gi + '" data-gf="tagline" maxlength="80" placeholder="' + esc(TAGS[g.type] || 'e.g. Made to order') + '" value="' + esc(g.tagline || '') + '">') +
         '<label class="toggle-row"><input type="checkbox" data-g="' + gi + '" data-gf="hidden"' + (g.hidden ? ' checked' : '') + '> Hide ' + (addon ? 'add-ons' : 'this category') + ' from customers</label>' + g.items.map(function (i) { return itemRow(gi, i); }).join('') +
-        '<button class="btn secondary small-btn" type="button" data-pl-add="' + gi + '">＋ Add ' + esc(g.label.toLowerCase()) + ' item</button></div>';
-    }).join('');
+        '<button class="btn secondary small-btn" type="button" data-pl-add="' + gi + '">＋ Add item</button></div>';
+    }).join('') + '<div class="two-btn"><button class="btn block" type="button" id="plAddCat">＋ Add category</button><button class="btn secondary block" type="button" id="plAddAddon">＋ Add-on section</button></div>';
     page.innerHTML = '<div class="page-head"><button class="icon-btn" data-back>‹ Back</button><h2>Price list</h2><span></span></div><div class="page-body">' +
       (hasExamples() || data.exampleIntro ? '<div class="pl-banner" id="plBanner">⚠️ <b>These are example prices.</b> Replace them with your real prices before you share. Items marked EXAMPLE haven’t been changed yet – tap one to edit it, or 🗑 to remove it.</div>' : '') +
       '<div class="card pl-share"><button class="btn block big" type="button" id="plShare">📤 Share price list</button>' +
@@ -99,7 +158,8 @@
     page.oninput = function (e) {
       var t = e.target, row = t.closest('.pl-item');
       if (t.id === 'plTitle') data.title = t.value; else if (t.id === 'plIntro') { data.intro = t.value; data.exampleIntro = false; } else if (t.id === 'plContact') data.contact = t.value;
-      else if (t.dataset.gf) { var gg = data.groups[+t.dataset.g]; if (t.dataset.gf === 'hidden') { gg.hidden = t.checked; t.closest('.pl-group').classList.toggle('is-hidden', t.checked); } else gg.tagline = t.value; changed(); return; }
+      else if (t.dataset.gf) { var gg = data.groups[+t.dataset.g]; if (t.dataset.gf === 'hidden') { gg.hidden = t.checked; t.closest('.pl-group').classList.toggle('is-hidden', t.checked); } else gg[t.dataset.gf] = t.value; changed(); return; }
+      else if (t.dataset.plPhoto) return;
       else if (row) {
         var it = find(row); if (!it) return; it[t.dataset.f] = t.value;
         if (it.example) { it.example = false; row.classList.remove('is-example'); var x = row.querySelector('.pl-ex'); if (x) x.remove(); }
@@ -117,7 +177,31 @@
         var it = { id: rid(), name: '', price: '', note: '' }; data.groups[+el.dataset.plAdd].items.push(it); save(); keep(render);
         var inp = page.querySelector('[data-id="' + it.id + '"] .pl-name'); if (inp) inp.focus(); return;
       }
-      if (t.closest('#plShare')) { share(); }
+      if (t.closest('#plShare')) { share(); return; }
+      var gi;
+      if ((el = t.closest('[data-pl-up]')) || (el = t.closest('[data-pl-down]'))) {
+        gi = +(el.dataset.plUp || el.dataset.plDown); var to = el.dataset.plUp !== undefined ? gi - 1 : gi + 1;
+        if (to < 0 || to >= data.groups.length) return;
+        var mv = data.groups.splice(gi, 1)[0]; data.groups.splice(to, 0, mv); changed(); keep(render); return;
+      }
+      if ((el = t.closest('[data-pl-gdel]'))) {
+        gi = +el.dataset.plGdel; var dg = data.groups[gi];
+        if (!confirm('Delete “' + (dg.label || 'this category') + '” and its ' + dg.items.length + ' item' + (dg.items.length === 1 ? '' : 's') + '?')) return;
+        data.groups.splice(gi, 1); changed(); keep(render); deps.toast('Category deleted'); return;
+      }
+      if ((el = t.closest('[data-pl-unphoto]'))) { delete data.groups[+el.dataset.plUnphoto].photo; changed(); keep(render); return; }
+      if (t.closest('#plAddCat') || t.closest('#plAddAddon')) {
+        var isAdd = !!t.closest('#plAddAddon'), name = prompt(isAdd ? 'Name for the add-on section (e.g. Extras)' : 'Name for the new category (e.g. Pies, Brownies)', isAdd ? 'Extras' : '');
+        if (!name || !name.trim()) return;
+        var ng = { type: isAdd ? 'other' : 'custom', label: name.trim().slice(0, 40), emoji: isAdd ? '✨' : '🍰', addon: isAdd, tagline: '', items: [{ id: rid(), name: '', price: '', note: '' }] };
+        ng.slug = uniqueSlug(ng.label); data.groups.push(ng); changed(); render();
+        var card = page.querySelector('[data-slug="' + ng.slug + '"]'); if (card) { card.scrollIntoView({ block: 'start' }); var fi = card.querySelector('.pl-name'); if (fi) fi.focus(); }
+        return;
+      }
+    };
+    page.onchange = function (e) {
+      var t = e.target; if (!t.dataset || t.dataset.plPhoto === undefined) return;
+      var f = t.files && t.files[0]; if (f) uploadPhoto(data.groups[+t.dataset.plPhoto], f);
     };
     return page;
   }
@@ -155,10 +239,11 @@
         }
         data.cookiesAdded = true; save();
       }
+      if (migrate()) { if (data.token) data.dirty = true; save(); }
       window.addEventListener('online', retryIfDirty);
       document.addEventListener('visibilitychange', function () { if (!document.hidden) retryIfDirty(); });
       setTimeout(retryIfDirty, 3000);
     });
   }
-  window.CakePrices = { DISCLAIMER: DISCLAIMER, init: init, render: render, publish: publish, url: url, hasExamples: hasExamples, data: function () { return data; } };
+  window.CakePrices = { squareJpeg: squareJpeg, uploadPhoto: uploadPhoto, DISCLAIMER: DISCLAIMER, init: init, render: render, publish: publish, url: url, hasExamples: hasExamples, data: function () { return data; } };
 })();
