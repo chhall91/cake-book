@@ -220,7 +220,8 @@
     publish().then(function (u) {
       renderStatus(); btn.disabled = false; btn.textContent = '📤 Share price list';
       var text = 'Here are my prices: ' + u + '\n' + DISCLAIMER;
-      if (navigator.share) navigator.share({ title: title(), text: 'Here are my prices:\n' + DISCLAIMER, url: u }).catch(function () {});
+      // v10.6: the link goes in the message body (Messages can drop a separate share url)
+      if (navigator.share) navigator.share({ text: text }).catch(function () {});
       else location.href = 'sms:?&body=' + encodeURIComponent(text);
     }, function (e) {
       renderStatus(); btn.disabled = false; btn.textContent = '📤 Share price list';

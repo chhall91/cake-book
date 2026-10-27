@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   var deps = null, creds = null, tokens = {}, pending = [], since = 0, down = 0, polling = null, timer = null;
-  var DOWN_MS = 5 * 60000;
+  var DOWN_MS = 60000;
 
   function apiBase() { return window.CakePush ? window.CakePush.apiBase() : String((window.CAKE_CONFIG || {}).pushApi || '').replace(/\/+$/, ''); }
   function randToken() {
@@ -28,9 +28,9 @@
       .then(function (r) {
         clearTimeout(t);
         return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) { var e = new Error(d.error || ('HTTP ' + r.status)); e.status = r.status; throw e; } down = 0; return d; });
-      }, function (e) { clearTimeout(t); down = Date.now(); throw e; })
+      }, function (e) { clearTimeout(t); throw e; })
       .catch(function (e) {
-        if (e.status >= 500 || e.status === 429) down = Date.now();
+        if (e.status >= 500) down = Date.now();
         if (e.status === 401 && path !== '/device') { creds = null; save(); }
         throw e;
       });
@@ -40,6 +40,8 @@
     return req('POST', '/device', {}).then(function (d) { creds = { deviceId: d.deviceId, secret: d.secret, createdAt: Date.now() }; return save().then(function () { return creds; }); });
   }
   /** Can we put a link in a text right now? */
+  // v10.6: a hiccup (e.g. a request cut off when iPhone suspends the app) no longer drops links for 5 minutes.
+  // Only a real server outage (5xx) pauses links, for 1 minute; a failed upload is queued and retried, so the link still works.
   function available() { return !!(apiBase() && myCreds() && navigator.onLine !== false && (!down || Date.now() - down > DOWN_MS)); }
   function key(orderId, personId) { return orderId + '|' + (personId || ''); }
   /** URL for this order/person's confirm link, or '' (fallback: old text without a link). Synchronous so it can go straight into an sms: href. */

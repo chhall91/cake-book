@@ -1429,6 +1429,7 @@
           return;
         }
         if ((el = t.closest('[data-person-text]'))) { var ptx = getPerson(bo, el.dataset.personText); if (ptx) {
+          if (ptx.phone) el.setAttribute('href', PR.smsLink(ptx.phone, personLinkText(bo, ptx), IS_IOS));   // v10.6: build the text (with its link) at tap time
           ptx.textedAt = Date.now(); delete ptx.changeRequest; bo.updatedAt = Date.now(); persist();
           if (/\/c\//.test(decodeURIComponent(el.getAttribute('href')))) Confirm.sent(bo.id, ptx.id, pageSummary(bo, PR.personText(bo, ptx, textOpts()), ptx), bo.dueDate);
         } return; }
@@ -1443,6 +1444,7 @@
         // the link itself opens Messages with the summary filled in; we just note when it was sent
         var cs = getOrder(el.dataset.confirmSend); if (!cs) return;
         if (confirmState(cs) === 'changed' || confirmState(cs) === 'change') { delete cs.customerConfirmedAt; delete cs.confirmedSig; delete cs.changeRequest; }
+        el.setAttribute('href', PR.smsLink(cs.phone, confirmLinkText(cs), IS_IOS));   // v10.6: never send a text rendered before the link was ready
         if (Confirm.linkFor(cs.id, '') && /\/c\//.test(decodeURIComponent(el.getAttribute('href')))) Confirm.sent(cs.id, '', pageSummary(cs, confirmText(cs)), cs.dueDate);
         cs.confirmSentAt = Date.now(); cs.updatedAt = Date.now(); persist();
         setTimeout(function () { if (location.hash === '#/order/' + cs.id) { var y = $('#page-detail').scrollTop; renderDetail(cs.id); $('#page-detail').scrollTop = y; } }, 600);
@@ -1567,6 +1569,7 @@
     Confirm.init({ kvGet: Store.kvGet, kvSet: Store.kvSet, apply: applyConfirmResponses }).then(function () {
       // links become available once the Worker identity is loaded: refresh an open order so its text includes the link
       var h = location.hash.split('/');
+      document.addEventListener('visibilitychange', function () { var hh = location.hash.split('/'); if (!document.hidden && hh[1] === 'order' && getOrder(hh[2]) && !document.querySelector('.sheet-wrap:not([hidden])')) { var p2 = $('#page-detail'), y2 = p2.scrollTop; renderDetail(hh[2]); p2.scrollTop = y2; } });
       if (h[1] === 'order' && getOrder(h[2]) && Confirm.available()) { var pg = $('#page-detail'), y = pg.scrollTop; renderDetail(h[2]); pg.scrollTop = y; }
     });
     if (ordersLoaded) sweepOrphanPhotos(); // never sweep if orders could not be read
