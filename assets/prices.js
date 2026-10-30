@@ -70,7 +70,7 @@
       if (!c) throw new Error('offline');
       var snap = JSON.stringify(payload());
       return fetch(base() + '/prices', { method: 'PUT', cache: 'no-store', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + c.deviceId + '.' + c.secret },
-        body: JSON.stringify({ token: data.token, list: JSON.parse(snap) }) }).then(function (r) {
+        body: JSON.stringify({ token: data.token, list: JSON.parse(snap), keep: deps.settings().venmoQr ? [deps.settings().venmoQr] : [] }) }).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status); });
       }).then(function () { if (JSON.stringify(payload()) === snap) data.dirty = false; data.publishedAt = Date.now(); return save(); });
     }).then(function () { publishing = null; return url(); }, function (e) { publishing = null; throw e; });

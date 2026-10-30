@@ -454,3 +454,7 @@ body.page-open #page-detail:not([hidden]) ~ .undo-bar, body.page-open .undo-bar.
 .pl-noimg, .pl-busy { display: flex; align-items: center; justify-content: center; font-size: 40px; background: var(--blush, #fde8ee); }
 .pl-photo-btns { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .pl-group.is-addon { border-style: dashed; }
+/* v11 invoices */
+.venmo-qr { width: 96px; height: 96px; border-radius: 12px; object-fit: contain; background: #fff; border: 1px solid var(--line); flex: 0 0 96px; }
+.venmo-qr.none { display: flex; align-items: center; justify-content: center; text-align: center; font-size: 11px; color: var(--choc-soft); padding: 6px; }
+.btn.invoice-send { margin-top: 12px; }

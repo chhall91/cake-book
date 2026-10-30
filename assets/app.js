@@ -400,7 +400,10 @@
       }).join('') + '</div>' : '<p class="muted small">No photos yet. <a href="#/edit/' + esc(o.id) + '">Add the picture the customer sent</a></p>') + '</div>' +
       productCardHTML(o, row) +
       (PR.isBulk(o) ? '' : '<div class="card"><h3>💵 Money</h3><dl class="kv">' + row('Price', money(o.price)) + row('Deposit paid', money(o.deposit)) + '</dl>' +
-      '<div class="balance-box"><span>Balance due</span><span>' + (o.status === 'Paid' ? 'Paid in full ✓' : money(balance(o))) + '</span></div></div>') +
+      '<div class="balance-box"><span>Balance due</span><span>' + (o.status === 'Paid' ? 'Paid in full ✓' : money(balance(o))) + '</span></div>' +
+      '<a class="btn block invoice-send" href="' + esc(invoiceHref(o)) + '" data-invoice-send="' + esc(o.id) + '">🧾 Send invoice</a>' +
+      (o.status === 'Paid' ? '' : '<button class="btn secondary block" data-mark-paid="' + esc(o.id) + '">✓ Mark paid</button>') +
+      (Invoice.has(o.id, '') ? '<p class="muted small">Invoice sent – the customer’s invoice page updates when you change the price or mark it paid.</p>' : '') + '</div>') +
       '<div class="card"><h3>👤 ' + (PR.isBulk(o) ? 'Group' : 'Customer') + '</h3><dl class="kv">' + row(PR.isBulk(o) ? 'Group' : 'Name', esc(o.name)) + (PR.isBulk(o) ? row('Organizer', esc(o.organizer)) : '') +
       row('Phone', o.phone ? '<a href="' + telHref(o.phone) + '">' + esc(o.phone) + '</a>' : '') + row('Email', o.email ? '<a href="mailto:' + esc(o.email) + '">' + esc(o.email) + '</a>' : '') +
       row('Handoff', o.fulfillment === 'delivery' ? 'Delivery' : 'Pickup') + row('Address', esc(o.address)) + row('Notes', esc(o.customerNotes).replace(/\n/g, '<br>')) + '</dl></div>' +
@@ -477,9 +480,11 @@
       '<div class="p-actions"><button class="p-pay" data-person-pay="' + esc(p.id) + '">' + payLbl + '</button>' +
       '<button class="p-pick" data-person-pick="' + esc(p.id) + '" aria-pressed="' + !!p.pickedUp + '">' + (p.pickedUp ? '📦 Picked up ✓' : '📦 Not picked up') + '</button>' +
       (p.phone ? '<a class="p-text" href="' + esc(PR.smsLink(p.phone, personLinkText(o, p), IS_IOS)) + '" data-person-text="' + esc(p.id) + '" aria-label="Text ' + esc(p.name) + '">💬</a>' : '') +
+      '<a class="p-text p-inv" href="' + esc(invoiceHref(o, p)) + '" data-person-invoice="' + esc(p.id) + '" aria-label="Send invoice to ' + esc(p.name) + '">🧾</a>' +
       '</div></div>';
   }
   function bulkChanged(o, msg) {
+    refreshInvoices(o);
     o.updatedAt = Date.now(); persist(); Push.markDirty(o.id);
     var pg = $('#page-detail'), y = pg.scrollTop; renderDetail(o.id); pg.scrollTop = y;
     if (msg) toast(msg);
@@ -744,6 +749,43 @@
     var txt = PR.personText(o, p, textOpts()), url = Confirm.linkFor(o.id, p.id);
     return url ? txt.replace(/\nThank you!$/, '') + '\nPlease tap to confirm or ask for a change:\n' + url + '\nThank you!' : txt;
   }
+  // ---------- v11 invoices ----------
+  var Invoice = window.CakeInvoice;
+  function venmoHandle() { return String(state.settings.venmo || '').trim().replace(/^@/, ''); }
+  function firstName(n) { return String(n || '').trim().split(/\s+/)[0] || ''; }
+  function invNo(o, p) { return String(o.id || '').replace(/[^A-Za-z0-9]/g, '').slice(-4).toUpperCase() + (p ? '-' + String(p.id).replace(/[^A-Za-z0-9]/g, '').slice(-2).toUpperCase() : ''); }
+  function buildInvoice(o, p) {
+    var base = { baker: state.settings.signature || '', venmo: venmoHandle(), qr: state.settings.venmoQr || '', payInfo: state.settings.payInfo || '' };
+    var sm = pageSummary(o, confirmText(o));
+    if (p) {
+      var m = PR.personMoney(o, p), label = PR.info(o).label.toLowerCase();
+      return Object.assign(base, { customer: p.name || '', title: PR.dz(p.dozen === '' ? 1 : p.dozen) + ' ' + PR.personFlavor(o, p).toLowerCase() + ' ' + label,
+        details: [o.name ? 'Group order: ' + o.name : ''].concat(p.note ? ['Note: ' + p.note] : []).filter(Boolean), when: sm.when, number: invNo(o, p),
+        total: m.owed, paid: m.collected, balance: m.outstanding, paidInFull: m.owed !== null && m.state === 'paid', estimate: m.owed === null,
+        note: (PR.info(o).label + ' – ' + (p.name || o.name || '')).slice(0, 60) });
+    }
+    var price = o.price === '' || o.price == null || isNaN(o.price) ? null : +o.price, dep = +o.deposit || 0, paidFull = o.status === 'Paid';
+    return Object.assign(base, { customer: o.name || '', title: sm.product, details: sm.details.filter(function (d) { return !/^(Deposit paid|Balance due|You can pay|Paid in full)/.test(d); }), when: sm.when, number: invNo(o),
+      total: price, paid: paidFull ? price || 0 : dep, balance: paidFull ? 0 : price === null ? null : Math.max(price - dep, 0), paidInFull: paidFull && price !== null,
+      estimate: price === null || o.status === 'Inquiry', note: (sm.product + ' – ' + (o.name || '')).slice(0, 60) });
+  }
+  function invoiceText(o, p) {
+    var inv = buildInvoice(o, p), url = Invoice.linkFor(o.id, p ? p.id : '');
+    var who = firstName(p ? p.name : o.name), L = [];
+    L.push('Hi' + (who ? ' ' + who : '') + '! Here’s your invoice' + (state.settings.signature ? ' from ' + state.settings.signature : '') + ' for ' + (p ? inv.title : inv.title.charAt(0).toLowerCase() + inv.title.slice(1)) + (inv.when ? ' (' + inv.when.replace(/^(Pickup|Delivery): /, function (x, a) { return a.toLowerCase() + ' '; }) + ')' : '') + '.');
+    if (inv.paidInFull) L.push('Paid in full – thank you!');
+    else if (inv.total === null) L.push('Total: to be confirmed.');
+    else if (inv.paid > 0) L.push('Total: ' + money(inv.total) + '. Paid so far: ' + money(inv.paid) + '. Balance due: ' + money(inv.balance) + '.');
+    else L.push('Total due: ' + money(inv.balance) + '.');
+    if (url) L.push((inv.paidInFull ? 'View invoice: ' : 'View & pay: ') + url);
+    else if (!inv.paidInFull && inv.venmo) L.push('You can pay with Venmo @' + inv.venmo + '.');
+    if (inv.estimate) L.push(window.CakePrices ? CakePrices.DISCLAIMER : '');
+    L.push('Thank you!');
+    return { text: L.filter(Boolean).join('\n'), inv: inv, url: url };
+  }
+  function invoiceHref(o, p) { return PR.smsLink(p ? p.phone : o.phone, invoiceText(o, p).text, IS_IOS); }
+  function refreshInvoices(o) { if (o) Invoice.refresh(o.id, function (pid) { var p = pid ? getPerson(o, pid) : null; return pid && !p ? null : buildInvoice(o, p); }, o.dueDate); }
+
   /** What the customer page shows (built from the same text, so it always matches the SMS). */
   function pageSummary(o, text, person) {
     var lines = text.split('\n'), out = { name: person ? person.name : (PR.isBulk(o) ? (o.organizer || o.name) : o.name), baker: state.settings.signature || '', details: [], product: '', when: '', price: '' };
@@ -1252,6 +1294,7 @@
     $('#signatureInput').value = state.settings.signature || '';
     $('#payInfoInput').value = state.settings.payInfo || '';
     $('#priceLinkInText').checked = !!state.settings.priceLinkInText;
+    renderVenmo();
     var ed = reminderEditor($('#defaultReminders'), state.settings.defaultReminders, persistSettings);
     $('#addDefaultReminder').onclick = function () { ed.add(); };
     var n = state.orders.length, base = n + ' order' + (n === 1 ? '' : 's') + ' saved on this device.';
@@ -1259,6 +1302,13 @@
     if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(function (e) {
       $('#storageInfo').textContent = base + ' ' + (e.usage / 1048576).toFixed(1) + ' MB used. Save a backup now and then (e.g. to iCloud Drive).';
     }).catch(function () {});
+  }
+  function renderVenmo() {
+    var h = venmoHandle(), qr = state.settings.venmoQr;
+    $('#venmoInput').value = h ? '@' + h : '';
+    $('#venmoQrBox').innerHTML = qr ? '<img class="venmo-qr" src="' + esc(Invoice.imgUrl(qr)) + '" alt="Your Venmo QR code">' : '<div class="venmo-qr none">' + (h ? 'No picture – invoices show a QR code made from @' + esc(h) : 'No QR code yet') + '</div>';
+    $('#venmoQrLabel').firstChild.textContent = qr ? '🔄 Replace QR picture' : '📷 Add QR code picture';
+    $('#venmoQrRemove').hidden = !qr;
   }
   function renderNotifCard() {
     var ps = Push.status(), el = $('#notifStatus'), html = '';
@@ -1433,6 +1483,11 @@
           ptx.textedAt = Date.now(); delete ptx.changeRequest; bo.updatedAt = Date.now(); persist();
           if (/\/c\//.test(decodeURIComponent(el.getAttribute('href')))) Confirm.sent(bo.id, ptx.id, pageSummary(bo, PR.personText(bo, ptx, textOpts()), ptx), bo.dueDate);
         } return; }
+        if ((el = t.closest('[data-person-invoice]'))) { var pin = getPerson(bo, el.dataset.personInvoice); if (pin) {
+          var it = invoiceText(bo, pin); el.setAttribute('href', PR.smsLink(pin.phone, it.text, IS_IOS));
+          if (it.url) Invoice.publish(bo.id, pin.id, it.inv, bo.dueDate, true); else toast('No internet – the invoice text was made without its link.', 4000);
+          pin.invoicedAt = Date.now(); bo.updatedAt = Date.now(); persist();
+        } return; }
         if ((el = t.closest('[data-walk]'))) { walkSheet(bo, el.dataset.walk); return; }
         if ((el = t.closest('[data-share-list]'))) { shareSheet(bo); return; }
         if ((el = t.closest('[data-bulk-more]'))) { moreSheet(bo); return; }
@@ -1440,6 +1495,19 @@
         if ((el = t.closest('[data-psort]'))) { peopleView.sort = peopleView.sort === 'name' ? 'added' : 'name'; renderPeople(bo); return; }
       }
       if ((el = t.closest('[data-typefilter]'))) { typeFilter = el.dataset.typefilter; try { sessionStorage.setItem('typeFilter', typeFilter); } catch (x) {} renderUpcoming(); return; }
+      if ((el = t.closest('[data-invoice-send]'))) {
+        var io = getOrder(el.dataset.invoiceSend); if (!io) return;
+        var itx = invoiceText(io, null); el.setAttribute('href', PR.smsLink(io.phone, itx.text, IS_IOS));
+        if (itx.url) Invoice.publish(io.id, '', itx.inv, io.dueDate, true); else toast('No internet – the invoice text was made without its link.', 4000);
+        io.invoicedAt = Date.now(); io.updatedAt = Date.now(); persist();
+        setTimeout(function () { if (location.hash === '#/order/' + io.id) { var y = $('#page-detail').scrollTop; renderDetail(io.id); $('#page-detail').scrollTop = y; } }, 600);
+        return;
+      }
+      if ((el = t.closest('[data-mark-paid]'))) {
+        var mp = getOrder(el.dataset.markPaid); if (!mp) return;
+        mp.status = 'Paid'; mp.updatedAt = Date.now(); persist(); Push.markDirty(mp.id); refreshInvoices(mp);
+        var y3 = $('#page-detail').scrollTop; renderDetail(mp.id); $('#page-detail').scrollTop = y3; toast('Marked paid ✓' + (Invoice.has(mp.id, '') ? ' – invoice updated' : '')); return;
+      }
       if ((el = t.closest('[data-confirm-send]'))) {
         // the link itself opens Messages with the summary filled in; we just note when it was sent
         var cs = getOrder(el.dataset.confirmSend); if (!cs) return;
@@ -1472,12 +1540,12 @@
       if ((el = t.closest('[data-icsfile]'))) { e.preventDefault(); var of = getOrder(el.dataset.icsfile); if (of) shareOrDownload(icsName(of), ICS.buildICS([of]), 'text/calendar'); return; }
       if ((el = t.closest('[data-status]'))) {
         var od = getOrder(location.hash.split('/')[2]); if (!od) return;
-        od.status = el.dataset.status; od.updatedAt = Date.now(); persist(); Push.markDirty(od.id); renderDetail(od.id); toast('Status: ' + od.status); return;
+        od.status = el.dataset.status; od.updatedAt = Date.now(); persist(); Push.markDirty(od.id); refreshInvoices(od); renderDetail(od.id); toast('Status: ' + od.status); return;
       }
       if ((el = t.closest('[data-delete]'))) {
         var del = getOrder(el.dataset.delete);
         if (del && confirm('Delete the order for ' + (del.name || 'this customer') + '? This cannot be undone.')) {
-          state.orders = state.orders.filter(function (x) { return x.id !== del.id; }); persist(); Push.markDirty(del.id); Confirm.forget(del.id); deleteOrderPhotos(del); toast('Order deleted'); location.replace('#/upcoming');
+          state.orders = state.orders.filter(function (x) { return x.id !== del.id; }); persist(); Push.markDirty(del.id); Confirm.forget(del.id); Invoice.forget(del.id); deleteOrderPhotos(del); toast('Order deleted'); location.replace('#/upcoming');
         }
       }
     });
@@ -1506,6 +1574,18 @@
     $('#exportIcsAll').onclick = function () { exportICS(state.orders.filter(function (o) { return o.dueDate; }), 'cake-orders-all.ics'); };
     $('#exportJson').onclick = exportJSON;
     $('#payInfoInput').onchange = function (e) { state.settings.payInfo = e.target.value.trim(); persistSettings(); toast(state.settings.payInfo ? 'Saved – texts will say “You can pay with ' + state.settings.payInfo + '”' : 'Payment info removed'); };
+    $('#venmoInput').onchange = function (e) {
+      var h = e.target.value.trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?venmo\.com\/(u\/)?/i, '').replace(/[^A-Za-z0-9_-]/g, '');
+      e.target.value = h ? '@' + h : ''; state.settings.venmo = h; persistSettings(); renderVenmo();
+      toast(h ? 'Invoices will show Venmo @' + h : 'Venmo removed from invoices');
+    };
+    $('#venmoQrFile').onchange = function (e) {
+      var f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+      $('#venmoQrBox').innerHTML = '<div class="pl-thumb pl-busy">⏳</div>';
+      Invoice.uploadQr(f).then(function (id) { state.settings.venmoQr = id; persistSettings(); renderVenmo(); toast('Venmo QR code saved ✓'); },
+        function (er) { renderVenmo(); toast(navigator.onLine === false ? 'You’re offline – try again when connected.' : 'Couldn’t save the picture (' + er.message + ')', 4500); });
+    };
+    $('#venmoQrRemove').onclick = function () { delete state.settings.venmoQr; persistSettings(); renderVenmo(); toast('QR code removed – invoices will show a QR made from your username'); };
     $('#priceLinkInText').onchange = function (e) {
       state.settings.priceLinkInText = e.target.checked; persistSettings();
       toast(!e.target.checked ? 'Price list link removed from texts' : (window.CakePrices && CakePrices.url() ? 'Confirmation texts will include your price list link' : 'Share your price list once first – then texts will include it'), 3500);
@@ -1566,6 +1646,7 @@
     });
     if (window.CakePrices) CakePrices.init({ kvGet: Store.kvGet, kvSet: Store.kvSet, esc: esc, toast: toast, settings: function () { return state.settings; } })
       .then(function () { if (/^#\/prices/.test(location.hash)) route(); });
+    Invoice.init({ kvGet: Store.kvGet, kvSet: Store.kvSet });
     Confirm.init({ kvGet: Store.kvGet, kvSet: Store.kvSet, apply: applyConfirmResponses }).then(function () {
       // links become available once the Worker identity is loaded: refresh an open order so its text includes the link
       var h = location.hash.split('/');
@@ -1592,5 +1673,5 @@
     });
     navigator.serviceWorker.addEventListener('message', function (e) { if (e.data && e.data.url) location.hash = e.data.url; });
   }
-  window.CakeApp = { closeSheet: closeSheet, products: PR, confirmText: confirmText, confirmLinkText: confirmLinkText, confirm: Confirm, store: Store, photos: PH, push: Push, pushRemindersFor: pushRemindersFor, state: state, persist: persist, route: route, buildICS: function () { return ICS.buildICS(state.orders); } };
+  window.CakeApp = { invoiceText: invoiceText, buildInvoice: buildInvoice, closeSheet: closeSheet, products: PR, confirmText: confirmText, confirmLinkText: confirmLinkText, confirm: Confirm, store: Store, photos: PH, push: Push, pushRemindersFor: pushRemindersFor, state: state, persist: persist, route: route, buildICS: function () { return ICS.buildICS(state.orders); } };
 })();

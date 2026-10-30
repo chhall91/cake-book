@@ -78,6 +78,16 @@
         <a class="btn block" href="#/prices">Edit &amp; share price list</a>
       </div>
       <div class="card">
+        <h3>🧾 Payment / Venmo</h3>
+        <label class="field-label" for="venmoInput">Your Venmo username</label>
+        <input type="text" id="venmoInput" class="text-input" placeholder="@YourVenmo" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40">
+        <p class="field-label" style="margin-top:12px">Venmo QR code (optional)</p>
+        <div class="pl-photo"><div id="venmoQrBox"></div><div class="pl-photo-btns">
+          <label class="btn secondary small-btn" id="venmoQrLabel">📷 Add QR code picture<input type="file" accept="image/*" class="vh" id="venmoQrFile"></label>
+          <button class="btn link" type="button" id="venmoQrRemove" hidden>Remove picture</button></div></div>
+        <p class="muted small">In Venmo, tap your picture → <b>Show QR code</b> → take a screenshot, then add it here. Every order has a <b>🧾 Send invoice</b> button: it texts the customer a private invoice page with the total, your QR code and a <b>Pay with Venmo</b> button.</p>
+      </div>
+      <div class="card">
         <h3>💬 Confirmation texts</h3>
         <label class="field-label" for="signatureInput">Your name or bakery name (optional)</label>
         <input type="text" id="signatureInput" class="text-input" placeholder="e.g. Kim’s Cakes" autocapitalize="words" maxlength="60">
@@ -164,6 +174,7 @@
   <script src="assets/push.js"></script>
   <script src="assets/confirm.js"></script>
   <script src="assets/prices.js"></script>
+  <script src="assets/invoice.js"></script>
   <script src="assets/app.js"></script>
 </body>
 </html>
