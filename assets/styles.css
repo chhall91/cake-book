@@ -458,3 +458,4 @@ body.page-open #page-detail:not([hidden]) ~ .undo-bar, body.page-open .undo-bar.
 .venmo-qr { width: 96px; height: 96px; border-radius: 12px; object-fit: contain; background: #fff; border: 1px solid var(--line); flex: 0 0 96px; }
 .venmo-qr.none { display: flex; align-items: center; justify-content: center; text-align: center; font-size: 11px; color: var(--choc-soft); padding: 6px; }
 .btn.invoice-send { margin-top: 12px; }
+.person .p-actions > .p-text { flex: 0 0 42px; padding: 4px; } .person .p-actions > .p-pay, .person .p-actions > .p-pick { padding: 4px 6px; font-size: 13.5px; }
